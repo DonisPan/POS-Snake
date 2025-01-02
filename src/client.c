@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,24 +11,36 @@
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
 
-void render_game(char *map) {
-  //printf("\003[H\033[J");
-  system("clear");
-  for (int y = 0; y < MAP_HEIGHT; ++y) {
-    for (int x = 0; x < MAP_WIDTH; ++x) {
-      putchar(map[y * MAP_WIDTH + x]);
+#define SNAKE_SPEED 500000
+
+// int client_socket;
+char map[MAP_WIDTH * MAP_HEIGHT];
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *render_game(void *args) {
+  int client_socket = *(int *)args;
+  while (1) {
+    pthread_mutex_lock(&mutex);
+    recv(client_socket, map, sizeof(map), 0);
+
+    printf("\003[H\033[J");
+    for (int y = 0; y < MAP_HEIGHT; ++y) {
+      for (int x = 0; x < MAP_WIDTH; ++x) {
+        putchar(map[y * MAP_WIDTH + x]);
+      }
+      putchar('\n');
     }
-    printf("\n");
+    pthread_mutex_unlock(&mutex);
+    usleep(SNAKE_SPEED);
   }
+  return NULL;
 }
 
 int main(int argc, char *argv[]) {
-  int client_socket;
   struct sockaddr_in server_address;
-  char buffer[BUFFER_SIZE];
-  char map[MAP_WIDTH * MAP_HEIGHT];
+  char buffer[1];
 
-  client_socket = socket(AF_INET, SOCK_STREAM, 0);
+  int client_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (client_socket == -1) {
     perror("Socket creation failed!");
     return EXIT_FAILURE;
@@ -45,21 +58,32 @@ int main(int argc, char *argv[]) {
 
   printf("Connected to the server\n");
 
+  // pthread_mutex_lock(&mutex);
+  // recv(client_socket, map, sizeof(map), 0);
+  // pthread_mutex_unlock(&mutex);
+
+  pthread_t render_thread;
+  pthread_create(&render_thread, NULL, render_game, &client_socket);
+
   while (1) {
     printf("Enter_direction (wasd): ");
-    char input = getchar();
+
+    // pthread_mutex_lock(&mutex);
+    buffer[0] = getchar();
     getchar();
-    buffer[0] = input;
+    // pthread_mutex_unlock(&mutex);
 
     send(client_socket, buffer, 1, 0);
 
-    memset(map, 0, sizeof(map));
-    recv(client_socket, map, sizeof(map), 0);
+    // pthread_mutex_lock(&mutex);
+    // recv(client_socket, map, sizeof(map), 0);
 
-    render_game(map);
+    // pthread_mutex_unlock(&mutex);
   }
 
   close(client_socket);
+  // pthread_cancel(render_thread);
+  pthread_join(render_thread, NULL);
 
   return EXIT_SUCCESS;
 }
