@@ -13,9 +13,10 @@
 
 #define SNAKE_SPEED 500000
 
-// int client_socket;
 char map[MAP_WIDTH * MAP_HEIGHT];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *render_game(void *args);
 
 void *render_game(void *args) {
   int client_socket = *(int *)args;
@@ -23,13 +24,14 @@ void *render_game(void *args) {
     pthread_mutex_lock(&mutex);
     recv(client_socket, map, sizeof(map), 0);
 
-    printf("\003[H\033[J");
+    printf("\033c");
     for (int y = 0; y < MAP_HEIGHT; ++y) {
       for (int x = 0; x < MAP_WIDTH; ++x) {
         putchar(map[y * MAP_WIDTH + x]);
       }
       putchar('\n');
     }
+    fflush(stdout);
     pthread_mutex_unlock(&mutex);
     usleep(SNAKE_SPEED);
   }
@@ -68,17 +70,14 @@ int main(int argc, char *argv[]) {
   while (1) {
     printf("Enter_direction (wasd): ");
 
-    // pthread_mutex_lock(&mutex);
     buffer[0] = getchar();
     getchar();
-    // pthread_mutex_unlock(&mutex);
+
+    if (buffer[0] == 'q') {
+      break;
+    }
 
     send(client_socket, buffer, 1, 0);
-
-    // pthread_mutex_lock(&mutex);
-    // recv(client_socket, map, sizeof(map), 0);
-
-    // pthread_mutex_unlock(&mutex);
   }
 
   close(client_socket);
