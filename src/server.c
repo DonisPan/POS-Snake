@@ -8,7 +8,6 @@
 #include <unistd.h>
 
 #define PORT 1234
-#define BUFFER_SIZE 1024
 
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
@@ -43,13 +42,8 @@ bool game_end = false;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// typedef struct {
-//   int client_socket;
-// } ClientData;
-
 void spawn_snake();
 void spawn_snacks();
-// void move_snake(int deltaX, int deltaY);
 void game_rules();
 void generate_map();
 void *handle_client(void *args);
@@ -96,8 +90,6 @@ void game_rules() {
 }
 
 void generate_map() {
-  // memset(map, ' ', sizeof(map));
-
   for (int y = 0; y < MAP_HEIGHT; ++y) {
     for (int x = 0; x < MAP_WIDTH; ++x) {
       if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
@@ -145,9 +137,6 @@ void *move_snake(void *args) {
 }
 
 void *handle_client(void *args) {
-
-  // ClientData *client_data = (ClientData *)args;
-  // int client_socket = client_data->client_socket;
   int client_socket = *(int *)args;
 
   pthread_mutex_lock(&mutex);
@@ -158,7 +147,6 @@ void *handle_client(void *args) {
     }
     putchar('\n');
   }
-  // send(client_socket, map, sizeof(map), 0);
   pthread_mutex_unlock(&mutex);
 
   while (!game_end) {
@@ -189,33 +177,23 @@ void *handle_client(void *args) {
       break;
     }
 
-    // game_rules();
-    // generate_map();
-
-    // send(client_socket, map, sizeof(map), 0);
-
     pthread_mutex_unlock(&mutex);
   }
 
   close(client_socket);
-  // free(client_data);
 
   return NULL;
 }
 
 int main(int argc, char *argv[]) {
   srand(time(NULL));
-  // spawn_snake();
   spawn_snacks();
 
   generate_map();
 
   int server_socket;
-  // int client_socket;
 
   struct sockaddr_in server_address;
-  // struct sockaddr_in client_address;
-  // socklen_t client_len = sizeof(client_address);
 
   server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket == -1) {
@@ -259,8 +237,6 @@ int main(int argc, char *argv[]) {
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, &client_socket);
     pthread_detach(client_thread);
-
-    // handle_client(client_socket);
   }
 
   close(server_socket);

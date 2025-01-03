@@ -27,7 +27,7 @@ void *render_game(void *args) {
     printf("\033c");
     for (int y = 0; y < MAP_HEIGHT; ++y) {
       for (int x = 0; x < MAP_WIDTH; ++x) {
-        putchar(map[y * MAP_WIDTH + x]);
+        printf("%c ", map[y * MAP_WIDTH + x]);
       }
       putchar('\n');
     }
@@ -59,11 +59,6 @@ int main(int argc, char *argv[]) {
   }
 
   printf("Connected to the server\n");
-
-  // pthread_mutex_lock(&mutex);
-  // recv(client_socket, map, sizeof(map), 0);
-  // pthread_mutex_unlock(&mutex);
-
   pthread_t render_thread;
   pthread_create(&render_thread, NULL, render_game, &client_socket);
 
