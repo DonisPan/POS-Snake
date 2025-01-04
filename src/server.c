@@ -8,13 +8,13 @@
 #include <time.h>
 #include <unistd.h>
 
-#define PORT 1234
+#define PORT 4006
 
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
-#define MAX_SNACKS 50
+#define MAX_SNACKS 250
 #define MAX_PLAYERS 10
-#define SNAKE_MAX_LENGTH 256
+#define SNAKE_MAX_LENGTH 250
 #define SNAKE_SPEED 500000
 bool game_end = false;
 
@@ -46,17 +46,19 @@ typedef struct {
 } Client_data;
 
 Snack snacks[MAX_SNACKS];
+int current_snack = 0;
 Snake snakes[MAX_PLAYERS];
 char map[MAP_WIDTH * MAP_HEIGHT];
 int client_sockets[MAX_PLAYERS];
 
 void spawn_snake(Snake *snake);
-void spawn_snacks();
+void spawn_snack();
 void generate_map();
 void move_snakes();
 void broadcast_map();
 void *handle_client(void *args);
 void *game_loop(void *args);
+int get_active_snakes();
 
 void spawn_snake(Snake *snake) {
   snake->length = 1;
@@ -67,12 +69,32 @@ void spawn_snake(Snake *snake) {
   snake->playing = true;
 }
 
-void spawn_snacks() {
-  for (int i = 0; i < MAX_SNACKS; ++i) {
-    snacks[i].x = 1 + rand() % (MAP_WIDTH - 2);
-    snacks[i].y = 1 + rand() % (MAP_HEIGHT - 2);
-    snacks[i].chomped = false;
+int get_active_snakes() {
+  int num = 0;
+  for (int i = 0; i < MAX_PLAYERS; ++i) {
+    if (snakes[i].playing) {
+      ++num;
+    }
   }
+  return num;
+}
+
+void spawn_snack() {
+    bool can_spawn = false;
+    int x;
+    int y;
+    while(!can_spawn) {
+      x = 1 + rand() % (MAP_WIDTH - 2);
+      y = 1 + rand() % (MAP_HEIGHT - 2);
+
+      if(map[y * MAP_WIDTH + x] == ' ') {
+        can_spawn = true;
+      }
+    }
+    snacks[current_snack].x = x;
+    snacks[current_snack].y = y;
+    snacks[current_snack].chomped = false;
+    ++current_snack;
 }
 
 void generate_map() {
@@ -140,7 +162,8 @@ void move_snakes() {
       if (!snacks[i].chomped && snacks[i].x == snake->parts[0].x &&
           snacks[i].y == snake->parts[0].y) {
         snacks[i].chomped = true;
-        snake->length++;
+        snake->length++; 
+        spawn_snack();
       }
     }
   }
@@ -185,6 +208,10 @@ void *handle_client(void *args) {
   printw("Client %d connected.\n", client_data->id);
   client_sockets[client_data->id] = client_data->client_socket;
 
+  pthread_mutex_lock(&mutex);
+  spawn_snack();
+  pthread_mutex_unlock(&mutex);
+
   while (snake->playing) {
     char buffer[1];
     recv(client_data->client_socket, buffer, 1, 0);
@@ -225,7 +252,6 @@ void *handle_client(void *args) {
 
 int main(int argc, char *argv[]) {
   srand(time(NULL));
-  spawn_snacks();
 
   int server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket == -1) {

@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define PORT 1234
+#define PORT 4006
 #define BUFFER_SIZE 1024
 
 #define MAP_WIDTH 25
