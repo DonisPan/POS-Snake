@@ -28,26 +28,20 @@ void *render_game(void *args) {
     pthread_mutex_lock(&mutex);
     recv(client_socket, map, sizeof(map), 0);
 
-    // printf("\033c");
-    //  for (int y = 0; y < MAP_HEIGHT; ++y) {
-    //    for (int x = 0; x < MAP_WIDTH; ++x) {
-    //      printf("%c ", map[y * MAP_WIDTH + x]);
-    //    }
-    //    putchar('\n');
-    //  }
-    //  fflush(stdout);
-
     clear();
     for (int y = 0; y < MAP_HEIGHT; ++y) {
       for (int x = 0; x < MAP_WIDTH; ++x) {
-        mvaddch(y, x, map[y * MAP_WIDTH + x]);
+        mvaddch(y, x * 2, map[y * MAP_WIDTH + x]);
+        mvaddch(y, x * 2 + 1, ' ');
       }
     }
+    printw("\n");
     refresh();
 
     pthread_mutex_unlock(&mutex);
     usleep(SNAKE_SPEED);
   }
+  endwin();
   return NULL;
 }
 
@@ -55,18 +49,19 @@ void start_server() {
   pid_t pid = fork();
   if (pid == 0) {
     execl("./server", "./server", NULL);
-  } else {
+  } else if (pid > 0) {
     usleep(1000000);
+  } else {
+    exit(EXIT_FAILURE);
   }
 }
 
 int connect_to_server() {
   struct sockaddr_in server_address;
-  // char buffer[1];
 
   int client_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (client_socket == -1) {
-    perror("Socket creation failed!");
+    perror("Socket creation failed!\n");
     return EXIT_FAILURE;
   }
 
@@ -77,30 +72,13 @@ int connect_to_server() {
   if (connect(client_socket, (struct sockaddr *)&server_address,
               sizeof(server_address)) == -1) {
     close(client_socket);
-    perror("Connection failed!");
+    perror("Connection failed!\n");
     return -1;
   }
   return client_socket;
 }
 
 int main(int argc, char *argv[]) {
-  // struct sockaddr_in server_address;
-
-  // int client_socket = socket(AF_INET, SOCK_STREAM, 0);
-  // if (client_socket == -1) {
-  //   perror("Socket creation failed!");
-  //   return EXIT_FAILURE;
-  // }
-
-  // server_address.sin_family = AF_INET;
-  // server_address.sin_port = htons(PORT);
-  // server_address.sin_addr.s_addr = INADDR_ANY;
-
-  // if (connect(client_socket, (struct sockaddr *)&server_address,
-  //             sizeof(server_address)) == -1) {
-  //   perror("Connection failed!");
-  //   return EXIT_FAILURE;
-  // }
 
   initscr();
   cbreak();
@@ -111,7 +89,7 @@ int main(int argc, char *argv[]) {
   int client_socket = connect_to_server();
 
   if (client_socket == -1) {
-    printw("Starting server...");
+    printw("Starting server...\n");
     refresh();
     start_server();
     client_socket = connect_to_server();
@@ -120,24 +98,24 @@ int main(int argc, char *argv[]) {
   printw("Connected to the server\n");
   refresh();
 
+  // usleep(2000000);
+
   pthread_t render_thread;
   pthread_create(&render_thread, NULL, render_game, &client_socket);
 
   while (1) {
     char buffer[1];
-    printw("Enter_direction (wasd): ");
-    refresh();
 
     buffer[0] = getch();
-    // getchar();
 
     if (buffer[0] == 'q') {
+      printw("Client has exited the game.\n");
+      usleep(1000000);
       break;
     }
 
     send(client_socket, buffer, 1, 0);
   }
-
 
   close(client_socket);
   pthread_cancel(render_thread);
