@@ -7,23 +7,23 @@
 #include <string.h>
 #include <unistd.h>
 
-#define PORT 4006
+#define PORT 4606
 #define BUFFER_SIZE 1024
-
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
-
 #define SNAKE_SPEED 500000
 
 char map[MAP_WIDTH * MAP_HEIGHT];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void render_menu();
 void *render_game(void *args);
 void start_server();
 int connect_to_server();
 
 void *render_game(void *args) {
   int client_socket = *(int *)args;
+
   while (1) {
     pthread_mutex_lock(&mutex);
     recv(client_socket, map, sizeof(map), 0);
@@ -31,8 +31,8 @@ void *render_game(void *args) {
     clear();
     for (int y = 0; y < MAP_HEIGHT; ++y) {
       for (int x = 0; x < MAP_WIDTH; ++x) {
-        mvaddch(y, x * 2, map[y * MAP_WIDTH + x]);
-        mvaddch(y, x * 2 + 1, ' ');
+        mvaddch(y + 1, x * 2 + 1, map[y * MAP_WIDTH + x]);
+        mvaddch(y + 1, x * 2 + 2, ' ');
       }
     }
     printw("\n");
@@ -78,48 +78,104 @@ int connect_to_server() {
   return client_socket;
 }
 
-int main(int argc, char *argv[]) {
+void render_menu() {
+  clear();
+  printw("Choose option:\n");
+  printw("1. New Game\n");
+  printw("2. Join Game\n");
+  printw("3. Continue\n");
+  printw("4. Exit\n");
+  refresh();
+}
 
+int main(int argc, char *argv[]) {
   initscr();
   cbreak();
   noecho();
   curs_set(0);
   keypad(stdscr, TRUE);
 
-  int client_socket = connect_to_server();
+  int client_socket = -1;
+  char option = 0;
+  while (option != '4') {
+    render_menu();
+    option = getch();
 
-  if (client_socket == -1) {
-    printw("Starting server...\n");
-    refresh();
-    start_server();
-    client_socket = connect_to_server();
-  }
+    switch (option) {
+    case '1':
+      printw("Starting server...\n");
+      refresh();
+      start_server();
+      client_socket = connect_to_server();
+      if (client_socket == -1) {
+        printw("Failed to connect to new server!\n");
+        refresh();
+        sleep(2);
+        endwin();
+        exit(EXIT_FAILURE);
+      }
+      break;
 
-  printw("Connected to the server\n");
-  refresh();
+    case '2':
+      printw("Joining game...\n");
+      refresh();
+      client_socket = connect_to_server();
+      if (client_socket == -1) {
+        printw("No server found!\n");
+        refresh();
+        sleep(2);
+        endwin();
+        // exit(EXIT_FAILURE);
+      }
 
-  // usleep(2000000);
+      break;
 
-  pthread_t render_thread;
-  pthread_create(&render_thread, NULL, render_game, &client_socket);
+    case '3':
+      printw("Returning to game...\n");
+      refresh();
+      endwin();
+      break;
 
-  while (1) {
-    char buffer[1];
-
-    buffer[0] = getch();
-
-    if (buffer[0] == 'q') {
-      printw("Client has exited the game.\n");
-      usleep(1000000);
+    default:
+      printw("Wrong input!\n");
+      refresh();
       break;
     }
 
-    send(client_socket, buffer, 1, 0);
-  }
+    if (client_socket != -1) {
+      printw("Connected to the server\n");
+      refresh();
 
-  close(client_socket);
-  pthread_cancel(render_thread);
-  pthread_join(render_thread, NULL);
+      // sleep(1);
+
+      pthread_t render_thread;
+      pthread_create(&render_thread, NULL, render_game, &client_socket);
+
+      char buffer[1];
+      buffer[0] = ' ';
+      while (buffer[0] != 'q') {
+
+        buffer[0] = getch();
+
+        if (buffer[0] == 'q') {
+          //pthread_mutex_lock(&mutex);
+          clear();
+          printw("Client has exited the game.\n");
+          refresh();
+          //send(client_socket, buffer, 1, 0);
+          //sleep(1);
+          //pthread_mutex_unlock(&mutex);
+        }
+
+        send(client_socket, buffer, 1, 0);
+      }
+
+      close(client_socket);
+      pthread_cancel(render_thread);
+      pthread_join(render_thread, NULL);
+      client_socket = -1;
+    }
+  }
   endwin();
   return EXIT_SUCCESS;
 }

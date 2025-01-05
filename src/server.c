@@ -8,7 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define PORT 4006
+#define PORT 4606
 
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
@@ -50,6 +50,7 @@ int current_snack = 0;
 Snake snakes[MAX_PLAYERS];
 char map[MAP_WIDTH * MAP_HEIGHT];
 int client_sockets[MAX_PLAYERS];
+int active_snakes = 0;
 
 void spawn_snake(Snake *snake);
 void spawn_snack();
@@ -64,7 +65,7 @@ void spawn_snake(Snake *snake) {
   snake->length = 1;
   snake->parts[0].x = 1 + rand() % (MAP_WIDTH - 2);
   snake->parts[0].y = 1 + rand() % (MAP_HEIGHT - 2);
-  snake->dirX = 1;
+  snake->dirX = 0;
   snake->dirY = 0;
   snake->playing = true;
 }
@@ -80,21 +81,21 @@ int get_active_snakes() {
 }
 
 void spawn_snack() {
-    bool can_spawn = false;
-    int x;
-    int y;
-    while(!can_spawn) {
-      x = 1 + rand() % (MAP_WIDTH - 2);
-      y = 1 + rand() % (MAP_HEIGHT - 2);
+  bool can_spawn = false;
+  int x;
+  int y;
+  while (!can_spawn) {
+    x = 1 + rand() % (MAP_WIDTH - 2);
+    y = 1 + rand() % (MAP_HEIGHT - 2);
 
-      if(map[y * MAP_WIDTH + x] == ' ') {
-        can_spawn = true;
-      }
+    if (map[y * MAP_WIDTH + x] == ' ') {
+      can_spawn = true;
     }
-    snacks[current_snack].x = x;
-    snacks[current_snack].y = y;
-    snacks[current_snack].chomped = false;
-    ++current_snack;
+  }
+  snacks[current_snack].x = x;
+  snacks[current_snack].y = y;
+  snacks[current_snack].chomped = false;
+  ++current_snack;
 }
 
 void generate_map() {
@@ -103,6 +104,7 @@ void generate_map() {
     for (int x = 0; x < MAP_WIDTH; ++x) {
       if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
         map[y * MAP_WIDTH + x] = '#';
+        //map[y * MAP_WIDTH + x] = get_active_snakes();
       } else {
         map[y * MAP_WIDTH + x] = ' ';
       }
@@ -147,6 +149,7 @@ void move_snakes() {
     if (snake->parts[0].x <= 0 || snake->parts[0].x >= MAP_WIDTH - 1 ||
         snake->parts[0].y <= 0 || snake->parts[0].y >= MAP_HEIGHT - 1) {
       snake->playing = false;
+      --active_snakes;
     }
 
     // self collisions
@@ -154,6 +157,7 @@ void move_snakes() {
       if (snake->parts[0].x == snake->parts[i].x &&
           snake->parts[0].y == snake->parts[i].y) {
         snake->playing = false;
+        --active_snakes;
       }
     }
 
@@ -162,22 +166,10 @@ void move_snakes() {
       if (!snacks[i].chomped && snacks[i].x == snake->parts[0].x &&
           snacks[i].y == snake->parts[0].y) {
         snacks[i].chomped = true;
-        snake->length++; 
+        snake->length++;
         spawn_snack();
       }
     }
-  }
-}
-
-void broadcast_map() {
-  pthread_mutex_lock(&mutex);
-  generate_map();
-  for (int s = 0; s < MAX_PLAYERS; ++s) {
-    if (!snakes[s].playing) {
-      continue;
-    }
-    send(client_sockets[s], map, sizeof(map), 0);
-    pthread_mutex_unlock(&mutex);
   }
 }
 
@@ -195,7 +187,6 @@ void *game_loop(void *args) {
       send(client_sockets[i], map, sizeof(map), 0);
     }
 
-    // broadcast_map();
     usleep(SNAKE_SPEED);
   }
   return NULL;
@@ -206,10 +197,13 @@ void *handle_client(void *args) {
   Snake *snake = client_data->snake;
 
   printw("Client %d connected.\n", client_data->id);
+  refresh();
+  sleep(1);
   client_sockets[client_data->id] = client_data->client_socket;
 
   pthread_mutex_lock(&mutex);
   spawn_snack();
+  ++active_snakes;
   pthread_mutex_unlock(&mutex);
 
   while (snake->playing) {
@@ -234,8 +228,9 @@ void *handle_client(void *args) {
       snake->dirX = 1;
       snake->dirY = 0;
       break;
-    case 'x':
-      game_end = true;
+    case 'q':
+      snake->playing = false;
+      break;
     default:
       break;
     }
@@ -243,7 +238,10 @@ void *handle_client(void *args) {
   }
 
   close(client_data->client_socket);
+  pthread_mutex_lock(&mutex);
   snake->playing = false;
+  --active_snakes;
+  pthread_mutex_unlock(&mutex);
   printf("Client %d disconnected.\n", client_data->id);
   free(client_data);
 
@@ -253,6 +251,7 @@ void *handle_client(void *args) {
 int main(int argc, char *argv[]) {
   srand(time(NULL));
 
+  // setup server socket
   int server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket == -1) {
     perror("Socket creation failed!\n");
@@ -277,6 +276,7 @@ int main(int argc, char *argv[]) {
 
   printf("Server is listening on port: %d\n", PORT);
 
+  // start game
   pthread_t game_thread;
   pthread_create(&game_thread, NULL, game_loop, NULL);
 
@@ -302,8 +302,14 @@ int main(int argc, char *argv[]) {
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, client_data);
     pthread_detach(client_thread);
-  }
 
+    printf("%d\n", get_active_snakes());
+    if(get_active_snakes() == 0) {
+      game_end = true;
+    }
+  }
+  
+  printf("Server closed!\n");
   close(server_socket);
   pthread_mutex_destroy(&mutex);
 
