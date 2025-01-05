@@ -28,6 +28,7 @@ void *render_game(void *args) {
 
   while (1) {
     pthread_mutex_lock(&mutex);
+    // printw("Your score: %d", );
     recv(client_socket, map, sizeof(map), 0);
 
     clear();
@@ -58,25 +59,29 @@ void start_server() {
   }
 }
 
-int connect_to_server() {
+int connect_to_server(int client_sock) {
   struct sockaddr_in server_address;
 
-  int client_socket = socket(AF_INET, SOCK_STREAM, 0);
-  if (client_socket == -1) {
-    perror("Socket creation failed!\n");
-    return EXIT_FAILURE;
-  }
+  int client_socket = client_sock;
+  if (client_sock == -1) {
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket == -1) {
+      perror("Socket creation failed!\n");
+      return EXIT_FAILURE;
+    }
 
-  server_address.sin_family = AF_INET;
-  server_address.sin_port = htons(PORT);
-  server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_family = AF_INET;
+    server_address.sin_port = htons(PORT);
+    server_address.sin_addr.s_addr = INADDR_ANY;
 
-  if (connect(client_socket, (struct sockaddr *)&server_address,
-              sizeof(server_address)) == -1) {
-    close(client_socket);
-    perror("Connection failed!\n");
-    return -1;
+    if (connect(client_socket, (struct sockaddr *)&server_address,
+                sizeof(server_address)) == -1) {
+      close(client_socket);
+      perror("Connection failed!\n");
+      return -1;
+    }
   }
+  sleep(1);
   return client_socket;
 }
 
@@ -116,7 +121,7 @@ int main(int argc, char *argv[]) {
       printw("Starting server...\n");
       refresh();
       start_server();
-      client_socket = connect_to_server();
+      client_socket = connect_to_server(-1);
 
       // game mode
       while (1) {
@@ -127,27 +132,37 @@ int main(int argc, char *argv[]) {
           break;
         }
       }
-
       break;
 
     case '2':
       printw("Joining game...\n");
       refresh();
-      client_socket = connect_to_server();
+      client_socket = connect_to_server(-1);
       if (client_socket == -1) {
         printw("No server found!\n");
         refresh();
-        sleep(2);
-        endwin();
-        // exit(EXIT_FAILURE);
+        continue;
+        // endwin();
+        //  exit(EXIT_FAILURE);
       }
-
       break;
 
     case '3':
       printw("Returning to game...\n");
       refresh();
-      endwin();
+      client_socket = connect_to_server(client_socket);
+      break;
+
+    case '4':
+      printw("Exiting...\n");
+      refresh();
+      if (client_socket != -1) {
+        char buffer[1];
+        buffer[0] = 'e';
+        send(client_socket, buffer, 1, 0);
+        close(client_socket);
+        client_socket = -1;
+      }
       break;
 
     default:
@@ -167,22 +182,11 @@ int main(int argc, char *argv[]) {
       buffer[0] = ' ';
       while (buffer[0] != 'q') {
         buffer[0] = getch();
-
-        if (buffer[0] == 'q') {
-          pthread_mutex_lock(&mutex);
-          printw("Client has exited the game.\n");
-          refresh();
-          sleep(2);
-          pthread_mutex_unlock(&mutex);
-        }
-
         send(client_socket, buffer, 1, 0);
       }
 
-      close(client_socket);
       pthread_cancel(render_thread);
       pthread_join(render_thread, NULL);
-      client_socket = -1;
     }
   }
   endwin();

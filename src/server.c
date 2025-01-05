@@ -182,7 +182,6 @@ void *game_loop(void *args) {
     pthread_mutex_lock(&mutex);
     move_snakes();
     generate_map();
-    pthread_mutex_unlock(&mutex);
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
       if (!snakes[i].playing) {
@@ -190,13 +189,17 @@ void *game_loop(void *args) {
       }
       send(client_sockets[i], map, sizeof(map), 0);
     }
+    pthread_mutex_unlock(&mutex);
 
+    // timed game logic
     if (timed_game) {
       ++timer;
       if (timer >= (GAME_TIME * 1000000 / SNAKE_SPEED)) {
-        printw("Game ended!\n");
-        refresh();
+        pthread_mutex_lock(&mutex);
         game_end = true;
+        pthread_mutex_unlock(&mutex);
+
+        printf("Game ended!\n");
       }
     }
 
@@ -209,9 +212,6 @@ void *handle_client(void *args) {
   Client_data *client_data = (Client_data *)args;
   Snake *snake = client_data->snake;
 
-  printw("Client %d connected.\n", client_data->id);
-  refresh();
-  sleep(1);
   client_sockets[client_data->id] = client_data->client_socket;
 
   pthread_mutex_lock(&mutex);
@@ -227,9 +227,10 @@ void *handle_client(void *args) {
       timed_game = true;
     }
   }
+  char buffer[1];
+  buffer[0] = ' ';
+  while (buffer[0] != 'e') {
 
-  while (snake->playing) {
-    char buffer[1];
     recv(client_data->client_socket, buffer, 1, 0);
 
     pthread_mutex_lock(&mutex);
@@ -238,20 +239,36 @@ void *handle_client(void *args) {
       snake->dirX = 0;
       snake->dirY = -1;
       break;
+
     case 's':
       snake->dirX = 0;
       snake->dirY = 1;
       break;
+
     case 'a':
       snake->dirX = -1;
       snake->dirY = 0;
       break;
+
     case 'd':
       snake->dirX = 1;
       snake->dirY = 0;
       break;
+
     case 'q':
+      // snake->dirX = 0;
+      // snake->dirY = 0;
+      pthread_mutex_lock(&mutex);
       snake->playing = false;
+      pthread_mutex_unlock(&mutex);
+      break;
+    case 'e':
+      snake->playing = false;
+      close(client_data->client_socket);
+      pthread_mutex_lock(&mutex);
+      snake->playing = false;
+      --active_snakes;
+      pthread_mutex_unlock(&mutex);
       break;
     default:
       break;
@@ -259,11 +276,6 @@ void *handle_client(void *args) {
     pthread_mutex_unlock(&mutex);
   }
 
-  close(client_data->client_socket);
-  pthread_mutex_lock(&mutex);
-  snake->playing = false;
-  --active_snakes;
-  pthread_mutex_unlock(&mutex);
   printf("Client %d disconnected.\n", client_data->id);
   free(client_data);
 
