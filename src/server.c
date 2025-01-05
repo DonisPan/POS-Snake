@@ -16,7 +16,10 @@
 #define MAX_PLAYERS 10
 #define SNAKE_MAX_LENGTH 250
 #define SNAKE_SPEED 500000
+#define GAME_TIME 10
+
 bool game_end = false;
+bool timed_game = false;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -104,7 +107,7 @@ void generate_map() {
     for (int x = 0; x < MAP_WIDTH; ++x) {
       if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
         map[y * MAP_WIDTH + x] = '#';
-        //map[y * MAP_WIDTH + x] = get_active_snakes();
+        // map[y * MAP_WIDTH + x] = get_active_snakes();
       } else {
         map[y * MAP_WIDTH + x] = ' ';
       }
@@ -174,6 +177,7 @@ void move_snakes() {
 }
 
 void *game_loop(void *args) {
+  int timer = 0;
   while (!game_end) {
     pthread_mutex_lock(&mutex);
     move_snakes();
@@ -185,6 +189,15 @@ void *game_loop(void *args) {
         continue;
       }
       send(client_sockets[i], map, sizeof(map), 0);
+    }
+
+    if (timed_game) {
+      ++timer;
+      if (timer >= (GAME_TIME * 1000000 / SNAKE_SPEED)) {
+        printw("Game ended!\n");
+        refresh();
+        game_end = true;
+      }
     }
 
     usleep(SNAKE_SPEED);
@@ -205,6 +218,15 @@ void *handle_client(void *args) {
   spawn_snack();
   ++active_snakes;
   pthread_mutex_unlock(&mutex);
+
+  // first player game mode set
+  if (client_data->id == 0) {
+    char mode[1];
+    recv(client_data->client_socket, mode, 1, 0);
+    if (mode[0] == '1') {
+      timed_game = true;
+    }
+  }
 
   while (snake->playing) {
     char buffer[1];
@@ -258,6 +280,9 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  int opt = 1;
+  setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int));
+
   struct sockaddr_in server_address;
   server_address.sin_family = AF_INET;
   server_address.sin_addr.s_addr = INADDR_ANY;
@@ -304,11 +329,11 @@ int main(int argc, char *argv[]) {
     pthread_detach(client_thread);
 
     printf("%d\n", get_active_snakes());
-    if(get_active_snakes() == 0) {
+    if (get_active_snakes() == 0) {
       game_end = true;
     }
   }
-  
+
   printf("Server closed!\n");
   close(server_socket);
   pthread_mutex_destroy(&mutex);

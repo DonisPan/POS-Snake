@@ -17,6 +17,8 @@ char map[MAP_WIDTH * MAP_HEIGHT];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void render_menu();
+void render_game_mode_menu();
+
 void *render_game(void *args);
 void start_server();
 int connect_to_server();
@@ -88,6 +90,14 @@ void render_menu() {
   refresh();
 }
 
+void render_game_mode_menu() {
+  clear();
+  printw("Choose mode:\n");
+  printw("1. Timed Game\n");
+  printw("2. Unlimited Game\n");
+  refresh();
+}
+
 int main(int argc, char *argv[]) {
   initscr();
   cbreak();
@@ -107,13 +117,17 @@ int main(int argc, char *argv[]) {
       refresh();
       start_server();
       client_socket = connect_to_server();
-      if (client_socket == -1) {
-        printw("Failed to connect to new server!\n");
-        refresh();
-        sleep(2);
-        endwin();
-        exit(EXIT_FAILURE);
+
+      // game mode
+      while (1) {
+        render_game_mode_menu();
+        char mode = getch();
+        if (mode == '1' || mode == '2') {
+          send(client_socket, &mode, 1, 0);
+          break;
+        }
       }
+
       break;
 
     case '2':
@@ -146,25 +160,20 @@ int main(int argc, char *argv[]) {
       printw("Connected to the server\n");
       refresh();
 
-      // sleep(1);
-
       pthread_t render_thread;
       pthread_create(&render_thread, NULL, render_game, &client_socket);
 
       char buffer[1];
       buffer[0] = ' ';
       while (buffer[0] != 'q') {
-
         buffer[0] = getch();
 
         if (buffer[0] == 'q') {
-          //pthread_mutex_lock(&mutex);
-          clear();
+          pthread_mutex_lock(&mutex);
           printw("Client has exited the game.\n");
           refresh();
-          //send(client_socket, buffer, 1, 0);
-          //sleep(1);
-          //pthread_mutex_unlock(&mutex);
+          sleep(2);
+          pthread_mutex_unlock(&mutex);
         }
 
         send(client_socket, buffer, 1, 0);
