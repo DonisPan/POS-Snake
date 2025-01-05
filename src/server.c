@@ -33,6 +33,7 @@ typedef struct {
   int length;
   int dirX;
   int dirY;
+  bool paused;
   bool playing;
 } Snake;
 
@@ -70,6 +71,7 @@ void spawn_snake(Snake *snake) {
   snake->parts[0].y = 1 + rand() % (MAP_HEIGHT - 2);
   snake->dirX = 0;
   snake->dirY = 0;
+  snake->paused = false;
   snake->playing = true;
 }
 
@@ -124,7 +126,7 @@ void generate_map() {
   // snakes
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     Snake *snake = &snakes[s];
-    if (!snake->playing) {
+    if (!snake->playing || snake->paused) {
       continue;
     }
     for (int i = 0; i < snake->length; ++i) {
@@ -138,7 +140,7 @@ void move_snakes() {
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     // move snake
     Snake *snake = &snakes[s];
-    if (!snake->playing) {
+    if (!snake->playing || snake->paused) {
       continue;
     }
 
@@ -184,10 +186,9 @@ void *game_loop(void *args) {
     generate_map();
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
-      if (!snakes[i].playing) {
-        continue;
+      if (client_sockets[i] != -1 && snakes[i].playing) {
+        send(client_sockets[i], map, sizeof(map), 0);
       }
-      send(client_sockets[i], map, sizeof(map), 0);
     }
     pthread_mutex_unlock(&mutex);
 
@@ -228,52 +229,52 @@ void *handle_client(void *args) {
     }
   }
   char buffer[1];
-  buffer[0] = ' ';
-  while (buffer[0] != 'e') {
-
+  while (1) {
     recv(client_data->client_socket, buffer, 1, 0);
 
-    pthread_mutex_lock(&mutex);
-    switch (buffer[0]) {
-    case 'w':
-      snake->dirX = 0;
-      snake->dirY = -1;
-      break;
-
-    case 's':
-      snake->dirX = 0;
-      snake->dirY = 1;
-      break;
-
-    case 'a':
-      snake->dirX = -1;
-      snake->dirY = 0;
-      break;
-
-    case 'd':
-      snake->dirX = 1;
-      snake->dirY = 0;
-      break;
-
-    case 'q':
-      // snake->dirX = 0;
-      // snake->dirY = 0;
+    if (buffer[0] == 'q') {
       pthread_mutex_lock(&mutex);
-      snake->playing = false;
+      snake->paused = true;
+      snake->dirX = 0;
+      snake->dirY = 0;
       pthread_mutex_unlock(&mutex);
-      break;
-    case 'e':
-      snake->playing = false;
-      close(client_data->client_socket);
-      pthread_mutex_lock(&mutex);
-      snake->playing = false;
-      --active_snakes;
-      pthread_mutex_unlock(&mutex);
-      break;
-    default:
-      break;
     }
-    pthread_mutex_unlock(&mutex);
+
+    if (snake->paused && buffer[0] == 'r') {
+      pthread_mutex_lock(&mutex);
+      snake->paused = false;
+      send(client_data->client_socket, map, sizeof(map), 0);
+      pthread_mutex_unlock(&mutex);
+    }
+
+    if (!snake->paused) {
+      pthread_mutex_lock(&mutex);
+      switch (buffer[0]) {
+      case 'w':
+        snake->dirX = 0;
+        snake->dirY = -1;
+        break;
+
+      case 's':
+        snake->dirX = 0;
+        snake->dirY = 1;
+        break;
+
+      case 'a':
+        snake->dirX = -1;
+        snake->dirY = 0;
+        break;
+
+      case 'd':
+        snake->dirX = 1;
+        snake->dirY = 0;
+        break;
+
+      default:
+        break;
+      }
+      pthread_mutex_unlock(&mutex);
+    }
   }
 
   printf("Client %d disconnected.\n", client_data->id);
@@ -282,7 +283,7 @@ void *handle_client(void *args) {
   return NULL;
 }
 
-int main(int argc, char *argv[]) {
+int main() {
   srand(time(NULL));
 
   // setup server socket
