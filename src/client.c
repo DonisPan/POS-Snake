@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #define PORT 4606
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 200;
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
 #define SNAKE_SPEED 500000
@@ -30,6 +30,9 @@ void *render_game(void *args) {
 
   while (1) {
     if (!paused) {
+      char message[BUFFER_SIZE] = "get_client_id";
+      send(client_socket, message, sizeof(string), 0);
+
       recv(client_socket, map, sizeof(map), 0);
 
       clear();
@@ -57,11 +60,12 @@ void *handle_input(void *args) {
     buffer[0] = getch();
 
     if (buffer[0] == 'q') {
+      send(client_socket, buffer, 1, 0);
+
       pthread_mutex_lock(&mutex);
       paused = true;
       pthread_mutex_unlock(&mutex);
 
-      send(client_socket, buffer, 1, 0);
       break;
     }
     send(client_socket, buffer, 1, 0);
@@ -182,7 +186,7 @@ int main() {
       char buffer[1];
       buffer[0] = 'r';
       send(client_socket, &buffer, 1, 0);
-
+      sleep(1);
       pthread_mutex_lock(&mutex);
       paused = false;
       pthread_mutex_unlock(&mutex);

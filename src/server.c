@@ -13,6 +13,7 @@
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
 #define MAX_SNACKS 250
+#define OBSTACLE_COUNT 30
 #define MAX_PLAYERS 10
 #define SNAKE_MAX_LENGTH 250
 #define SNAKE_SPEED 500000
@@ -20,6 +21,7 @@
 
 bool game_end = false;
 bool timed_game = false;
+bool obstacles = false;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -44,6 +46,11 @@ typedef struct {
 } Snack;
 
 typedef struct {
+  int x;
+  int y;
+} Obstacle;
+
+typedef struct {
   int id;
   int client_socket;
   Snake *snake;
@@ -53,12 +60,14 @@ Snack snacks[MAX_SNACKS];
 int current_snack = 0;
 Snake snakes[MAX_PLAYERS];
 char map[MAP_WIDTH * MAP_HEIGHT];
+Obstacle obstacle_map[OBSTACLE_COUNT];
 int client_sockets[MAX_PLAYERS];
 int active_snakes = 0;
 
 void spawn_snake(Snake *snake);
 void spawn_snack();
 void generate_map();
+void generate_obstacles();
 void move_snakes();
 void broadcast_map();
 void *handle_client(void *args);
@@ -103,17 +112,32 @@ void spawn_snack() {
   ++current_snack;
 }
 
+void generate_obstacles() {
+  int placed = 0;
+  while (placed < OBSTACLE_COUNT) {
+    int x = 1 + rand() % (MAP_WIDTH - 2);
+    int y = 1 + rand() % (MAP_HEIGHT - 2);
+    obstacle_map[placed].x = x;
+    obstacle_map[placed].y = y;
+    ++placed;
+  }
+}
+
 void generate_map() {
   // map border
   for (int y = 0; y < MAP_HEIGHT; ++y) {
     for (int x = 0; x < MAP_WIDTH; ++x) {
       if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
         map[y * MAP_WIDTH + x] = '#';
-        // map[y * MAP_WIDTH + x] = get_active_snakes();
       } else {
         map[y * MAP_WIDTH + x] = ' ';
       }
     }
+  }
+
+  // obstacles
+  for (int i = 0; i < OBSTACLE_COUNT; ++i) {
+    map[obstacle_map[i].y * MAP_WIDTH + obstacle_map[i].x] = 'X';
   }
 
   // snacks
@@ -155,6 +179,15 @@ void move_snakes() {
         snake->parts[0].y <= 0 || snake->parts[0].y >= MAP_HEIGHT - 1) {
       snake->playing = false;
       --active_snakes;
+    }
+
+    // obstacle collision
+    for (int i = 0; i < OBSTACLE_COUNT; ++i) {
+      if (obstacle_map[i].x == snake->parts[0].x &&
+          obstacle_map[i].y == snake->parts[0].y) {
+        snake->playing = false;
+        --active_snakes;
+      }
     }
 
     // self collisions
@@ -286,6 +319,8 @@ void *handle_client(void *args) {
 int main() {
   srand(time(NULL));
 
+  generate_obstacles();
+
   // setup server socket
   int server_socket = socket(AF_INET, SOCK_STREAM, 0);
   if (server_socket == -1) {
@@ -342,8 +377,10 @@ int main() {
     pthread_detach(client_thread);
 
     printf("%d\n", get_active_snakes());
-    if (get_active_snakes() == 0) {
+    sleep(1);
+    if (active_snakes == 0) {
       game_end = true;
+      pthread_join(game_thread, NULL);
     }
   }
 
