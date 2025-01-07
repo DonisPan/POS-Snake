@@ -30,13 +30,16 @@ void *render_game(void *args) {
 
   while (1) {
     if (!paused) {
-      char message[BUFFER_SIZE] = "get_client_id";
-      send(client_socket, message, sizeof(string), 0);
+      int id;
+      recv(client_socket, &id, sizeof(int), 0);
+
+      int length;
+      recv(client_socket, &length, sizeof(int), 0);
 
       recv(client_socket, map, sizeof(map), 0);
 
       clear();
-      printw("Player %d", client_socket);
+      printw("Player %d score: %d", id, length);
       for (int y = 0; y < MAP_HEIGHT; ++y) {
         for (int x = 0; x < MAP_WIDTH; ++x) {
           mvaddch(y + 1, x * 2 + 1, map[y * MAP_WIDTH + x]);

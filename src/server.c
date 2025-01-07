@@ -13,7 +13,7 @@
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
 #define MAX_SNACKS 250
-#define OBSTACLE_COUNT 30
+#define OBSTACLE_COUNT 20
 #define MAX_PLAYERS 10
 #define SNAKE_MAX_LENGTH 250
 #define SNAKE_SPEED 500000
@@ -150,7 +150,7 @@ void generate_map() {
   // snakes
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     Snake *snake = &snakes[s];
-    if (!snake->playing || snake->paused) {
+    if (!snake->playing) {
       continue;
     }
     for (int i = 0; i < snake->length; ++i) {
@@ -220,6 +220,12 @@ void *game_loop(void *args) {
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
       if (client_sockets[i] != -1 && snakes[i].playing) {
+        int id = i;
+        send(client_sockets[i], &id, sizeof(int), 0);
+
+        int length = snakes[i].length;
+        send(client_sockets[i], &length, sizeof(int), 0);
+
         send(client_sockets[i], map, sizeof(map), 0);
       }
     }
@@ -276,7 +282,8 @@ void *handle_client(void *args) {
     if (snake->paused && buffer[0] == 'r') {
       pthread_mutex_lock(&mutex);
       snake->paused = false;
-      send(client_data->client_socket, map, sizeof(map), 0);
+      // send(client_data->client_socket, map, sizeof(map), 0);
+      sleep(1);
       pthread_mutex_unlock(&mutex);
     }
 
@@ -310,8 +317,8 @@ void *handle_client(void *args) {
     }
   }
 
-  printf("Client %d disconnected.\n", client_data->id);
-  free(client_data);
+  // printf("Client %d disconnected.\n", client_data->id);
+  // free(client_data);
 
   return NULL;
 }
