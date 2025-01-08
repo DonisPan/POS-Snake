@@ -18,6 +18,7 @@
 #define SNAKE_MAX_LENGTH 250
 #define SNAKE_SPEED 500000
 #define GAME_TIME 10
+#define PAUSE_TIME 5
 
 bool game_end = false;
 bool timed_game = false;
@@ -72,7 +73,6 @@ void move_snakes();
 void broadcast_map();
 void *handle_client(void *args);
 void *game_loop(void *args);
-int get_active_snakes();
 
 void spawn_snake(Snake *snake) {
   snake->length = 1;
@@ -82,16 +82,6 @@ void spawn_snake(Snake *snake) {
   snake->dirY = 0;
   snake->paused = false;
   snake->playing = true;
-}
-
-int get_active_snakes() {
-  int num = 0;
-  for (int i = 0; i < MAX_PLAYERS; ++i) {
-    if (snakes[i].playing) {
-      ++num;
-    }
-  }
-  return num;
 }
 
 void spawn_snack() {
@@ -164,7 +154,8 @@ void move_snakes() {
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     // move snake
     Snake *snake = &snakes[s];
-    if (!snake->playing || snake->paused) {
+    if (!snake->playing || snake->paused ||
+        (snake->dirX == 0 && snake->dirY == 0)) {
       continue;
     }
 
@@ -178,7 +169,7 @@ void move_snakes() {
     if (snake->parts[0].x <= 0 || snake->parts[0].x >= MAP_WIDTH - 1 ||
         snake->parts[0].y <= 0 || snake->parts[0].y >= MAP_HEIGHT - 1) {
       snake->playing = false;
-      --active_snakes;
+      // --active_snakes;
     }
 
     // obstacle collision
@@ -186,16 +177,19 @@ void move_snakes() {
       if (obstacle_map[i].x == snake->parts[0].x &&
           obstacle_map[i].y == snake->parts[0].y) {
         snake->playing = false;
-        --active_snakes;
+        // --active_snakes;
       }
     }
 
-    // self collisions
-    for (int i = 1; i < snake->length; ++i) {
-      if (snake->parts[0].x == snake->parts[i].x &&
-          snake->parts[0].y == snake->parts[i].y) {
-        snake->playing = false;
-        --active_snakes;
+    // snake collisions
+    for (int j = 0; j < MAX_PLAYERS; ++j) {
+      Snake *tmp_snake = &snakes[j];
+      for (int i = 1; i < tmp_snake->length; ++i) {
+        if (snake->parts[0].x == tmp_snake->parts[i].x &&
+            snake->parts[0].y == tmp_snake->parts[i].y) {
+          snake->playing = false;
+          // --active_snakes;
+        }
       }
     }
 
@@ -238,8 +232,6 @@ void *game_loop(void *args) {
         pthread_mutex_lock(&mutex);
         game_end = true;
         pthread_mutex_unlock(&mutex);
-
-        printf("Game ended!\n");
       }
     }
 
@@ -267,27 +259,27 @@ void *handle_client(void *args) {
       timed_game = true;
     }
   }
+
+  // user is playing
   char buffer[1];
-  while (1) {
+  int pause_timer = 0;
+  bool playing = true;
+  while (playing) {
     recv(client_data->client_socket, buffer, 1, 0);
 
-    if (buffer[0] == 'q') {
+    if (buffer[0] == 'r') {
       pthread_mutex_lock(&mutex);
-      snake->paused = true;
-      snake->dirX = 0;
-      snake->dirY = 0;
+      snake->paused = false;
       pthread_mutex_unlock(&mutex);
     }
 
-    if (snake->paused && buffer[0] == 'r') {
-      pthread_mutex_lock(&mutex);
-      snake->paused = false;
-      // send(client_data->client_socket, map, sizeof(map), 0);
-      sleep(1);
-      pthread_mutex_unlock(&mutex);
+    if (buffer[0] == 'e') {
+      playing = false;
+      continue;
     }
 
     if (!snake->paused) {
+      pause_timer = 0;
       pthread_mutex_lock(&mutex);
       switch (buffer[0]) {
       case 'w':
@@ -310,15 +302,33 @@ void *handle_client(void *args) {
         snake->dirY = 0;
         break;
 
+      case 'q':
+        snake->paused = true;
+        snake->dirX = 0;
+        snake->dirY = 0;
+        break;
+
       default:
         break;
       }
       pthread_mutex_unlock(&mutex);
     }
+
+    // pause timeout
+    if (snake->paused) {
+      ++pause_timer;
+      if (pause_timer >= (PAUSE_TIME * 1000000)) {
+        printw("Client %d disconnected.\n", client_data->id);
+        sleep(2);
+        playing = false;
+      }
+      sleep(1);
+    }
   }
 
-  // printf("Client %d disconnected.\n", client_data->id);
-  // free(client_data);
+  --active_snakes;
+  close(client_data->client_socket);
+  free(client_data);
 
   return NULL;
 }
@@ -383,7 +393,6 @@ int main() {
     pthread_create(&client_thread, NULL, handle_client, client_data);
     pthread_detach(client_thread);
 
-    printf("%d\n", get_active_snakes());
     sleep(1);
     if (active_snakes == 0) {
       game_end = true;

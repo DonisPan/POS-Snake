@@ -42,6 +42,22 @@ void *render_game(void *args) {
       printw("Player %d score: %d", id, length);
       for (int y = 0; y < MAP_HEIGHT; ++y) {
         for (int x = 0; x < MAP_WIDTH; ++x) {
+          switch (map[y * MAP_WIDTH + x]) {
+          case 'X':
+            attron(COLOR_PAIR(1));
+            break;
+          case '*':
+            attron(COLOR_PAIR(2));
+            break;
+          case '0':
+          case 'o':
+            attron(COLOR_PAIR(3));
+            break;
+          default:
+            attron(COLOR_PAIR(4));
+            break;
+          }
+
           mvaddch(y + 1, x * 2 + 1, map[y * MAP_WIDTH + x]);
           mvaddch(y + 1, x * 2 + 2, ' ');
         }
@@ -61,9 +77,10 @@ void *handle_input(void *args) {
 
   while (1) {
     buffer[0] = getch();
+    send(client_socket, buffer, 1, 0);
 
     if (buffer[0] == 'q') {
-      send(client_socket, buffer, 1, 0);
+      // send(client_socket, buffer, 1, 0);
 
       pthread_mutex_lock(&mutex);
       paused = true;
@@ -71,7 +88,6 @@ void *handle_input(void *args) {
 
       break;
     }
-    send(client_socket, buffer, 1, 0);
   }
   return NULL;
 }
@@ -137,6 +153,12 @@ int main() {
   noecho();
   curs_set(0);
   keypad(stdscr, TRUE);
+  start_color();
+
+  init_pair(1, COLOR_RED, COLOR_BLACK);
+  init_pair(2, COLOR_GREEN, COLOR_BLACK);
+  init_pair(3, COLOR_BLUE, COLOR_BLACK);
+  init_pair(4, COLOR_WHITE, COLOR_BLACK);
 
   pthread_t render_thread;
 
@@ -146,7 +168,13 @@ int main() {
     render_menu();
     option = getch();
 
+    if (client_socket != -1) {
+      // recv();
+    }
+
     switch (option) {
+      char option_buffer[1];
+
     case '1':
       printw("Starting server...\n");
       refresh();
@@ -158,6 +186,7 @@ int main() {
         render_game_mode_menu();
         char mode = getch();
         if (mode == '1' || mode == '2') {
+          sleep(1);
           send(client_socket, &mode, 1, 0);
           break;
         }
@@ -184,11 +213,9 @@ int main() {
         refresh();
         sleep(2);
         break;
-        // continue;
       }
-      char buffer[1];
-      buffer[0] = 'r';
-      send(client_socket, &buffer, 1, 0);
+      option_buffer[0] = 'r';
+      send(client_socket, &option_buffer, 1, 0);
       sleep(1);
       pthread_mutex_lock(&mutex);
       paused = false;
@@ -196,17 +223,23 @@ int main() {
       break;
 
     case '4':
+      clear();
       printw("Exiting...\n");
+      sleep(2);
       refresh();
-      if (client_socket != -1) {
-        close(client_socket);
-        client_socket = -1;
-      }
+      // if (client_socket != -1) {
+      //   close(client_socket);
+      //   client_socket = -1;
+      // }
+      option_buffer[0] = 'e';
+      send(client_socket, &option_buffer, 1, 0);
+      client_socket = -1;
       break;
 
     default:
       printw("Wrong input!\n");
       refresh();
+      sleep(1);
       continue;
       break;
     }
@@ -219,7 +252,6 @@ int main() {
 
       pthread_mutex_lock(&mutex);
       paused = false;
-      // pthread_cond_signal(&render_cond);
       pthread_mutex_unlock(&mutex);
 
       pthread_t input_thread;
