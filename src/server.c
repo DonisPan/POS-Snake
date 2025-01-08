@@ -140,7 +140,7 @@ void generate_map() {
   // snakes
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     Snake *snake = &snakes[s];
-    if (!snake->playing) {
+    if (!snake->playing || snake->paused) {
       continue;
     }
     for (int i = 0; i < snake->length; ++i) {

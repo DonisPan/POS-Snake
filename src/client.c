@@ -49,12 +49,8 @@ void *render_game(void *args) {
           case '*':
             attron(COLOR_PAIR(2));
             break;
-          case '0':
-          case 'o':
-            attron(COLOR_PAIR(3));
-            break;
           default:
-            attron(COLOR_PAIR(4));
+            attron(COLOR_PAIR(3));
             break;
           }
 
@@ -74,18 +70,14 @@ void *handle_input(void *args) {
   int client_socket = *(int *)args;
 
   char buffer[1];
-
   while (1) {
     buffer[0] = getch();
     send(client_socket, buffer, 1, 0);
 
     if (buffer[0] == 'q') {
-      // send(client_socket, buffer, 1, 0);
-
       pthread_mutex_lock(&mutex);
       paused = true;
       pthread_mutex_unlock(&mutex);
-
       break;
     }
   }
@@ -157,8 +149,7 @@ int main() {
 
   init_pair(1, COLOR_RED, COLOR_BLACK);
   init_pair(2, COLOR_GREEN, COLOR_BLACK);
-  init_pair(3, COLOR_BLUE, COLOR_BLACK);
-  init_pair(4, COLOR_WHITE, COLOR_BLACK);
+  init_pair(3, COLOR_WHITE, COLOR_BLACK);
 
   pthread_t render_thread;
 
@@ -186,7 +177,7 @@ int main() {
         render_game_mode_menu();
         char mode = getch();
         if (mode == '1' || mode == '2') {
-          sleep(1);
+          // sleep(1);
           send(client_socket, &mode, 1, 0);
           break;
         }
@@ -207,7 +198,6 @@ int main() {
     case '3':
       printw("Returning to game...\n");
       refresh();
-      // client_socket = connect_to_server(client_socket);
       if (client_socket == -1) {
         printw("No game to return to!\n");
         refresh();
@@ -227,12 +217,12 @@ int main() {
       printw("Exiting...\n");
       sleep(2);
       refresh();
-      // if (client_socket != -1) {
-      //   close(client_socket);
-      //   client_socket = -1;
-      // }
+      if (client_socket == -1) {
+        break;
+      }
       option_buffer[0] = 'e';
       send(client_socket, &option_buffer, 1, 0);
+      sleep(1);
       client_socket = -1;
       break;
 
