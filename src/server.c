@@ -225,6 +225,7 @@ void move_snakes() {
 
 void *game_loop(void *args) {
   int timer = 0;
+
   while (!game.game_end) {
     pthread_mutex_lock(&game.mutex);
     move_snakes();
@@ -318,7 +319,8 @@ void *handle_client(void *args) {
     }
     recv(client_data->client_socket, mode, 1, 0);
     if (mode[0] == '1') {
-      game.timed_game = true;
+      game.obstacles = true;
+      generate_obstacles();
     }
   }
 
@@ -400,7 +402,7 @@ void *handle_client(void *args) {
 int main() {
   srand(time(NULL));
 
-  generate_obstacles();
+  // generate_obstacles();
 
   // setup server socket
   int server_socket = socket(AF_INET, SOCK_STREAM, 0);

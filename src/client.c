@@ -8,14 +8,22 @@
 #include <unistd.h>
 
 #define PORT 4606
+
 #define BUFFER_SIZE 200;
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
 #define SNAKE_SPEED 500000
 
-char map[MAP_WIDTH * MAP_HEIGHT];
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-bool paused = false;
+typedef struct {
+  char map[MAP_WIDTH * MAP_HEIGHT];
+  pthread_mutex_t mutex;
+  bool paused;
+} Client_data;
+
+Client_data game = {
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+    .paused = false,
+};
 
 void render_menu();
 void render_game_mode_menu();
@@ -29,20 +37,20 @@ void *render_game(void *args) {
   int client_socket = *(int *)args;
 
   while (1) {
-    if (!paused) {
+    if (!game.paused) {
       int id;
       recv(client_socket, &id, sizeof(int), 0);
 
       int length;
       recv(client_socket, &length, sizeof(int), 0);
 
-      recv(client_socket, map, sizeof(map), 0);
+      recv(client_socket, game.map, sizeof(game.map), 0);
 
       clear();
-      printw("Player %d score: %d", id, length);
+      printw("Player %d score: %d", id + 1, length - 1);
       for (int y = 0; y < MAP_HEIGHT; ++y) {
         for (int x = 0; x < MAP_WIDTH; ++x) {
-          switch (map[y * MAP_WIDTH + x]) {
+          switch (game.map[y * MAP_WIDTH + x]) {
           case 'X':
             attron(COLOR_PAIR(1));
             break;
@@ -54,7 +62,7 @@ void *render_game(void *args) {
             break;
           }
 
-          mvaddch(y + 1, x * 2 + 1, map[y * MAP_WIDTH + x]);
+          mvaddch(y + 1, x * 2 + 1, game.map[y * MAP_WIDTH + x]);
           mvaddch(y + 1, x * 2 + 2, ' ');
         }
       }
@@ -62,7 +70,6 @@ void *render_game(void *args) {
       refresh();
     }
   }
-  endwin();
   return NULL;
 }
 
@@ -75,9 +82,9 @@ void *handle_input(void *args) {
     send(client_socket, buffer, 1, 0);
 
     if (buffer[0] == 'q') {
-      pthread_mutex_lock(&mutex);
-      paused = true;
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_lock(&game.mutex);
+      game.paused = true;
+      pthread_mutex_unlock(&game.mutex);
       break;
     }
   }
@@ -117,7 +124,6 @@ int connect_to_server(int client_sock) {
       return -1;
     }
   }
-  sleep(1);
   return client_socket;
 }
 
@@ -136,6 +142,14 @@ void render_game_mode_menu() {
   printw("Choose mode:\n");
   printw("1. Timed Game\n");
   printw("2. Unlimited Game\n");
+  refresh();
+}
+
+void render_map_type_menu() {
+  clear();
+  printw("Choose map:\n");
+  printw("1. With Obstacles\n");
+  printw("2. Clean\n");
   refresh();
 }
 
@@ -173,7 +187,15 @@ int main() {
         render_game_mode_menu();
         char mode = getch();
         if (mode == '1' || mode == '2') {
-          // sleep(1);
+          send(client_socket, &mode, 1, 0);
+          break;
+        }
+      }
+      // map type
+      while (1) {
+        render_map_type_menu();
+        char mode = getch();
+        if (mode == '1' || mode == '2') {
           send(client_socket, &mode, 1, 0);
           break;
         }
@@ -203,9 +225,9 @@ int main() {
       option_buffer[0] = 'r';
       send(client_socket, &option_buffer, 1, 0);
       sleep(1);
-      pthread_mutex_lock(&mutex);
-      paused = false;
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_lock(&game.mutex);
+      game.paused = false;
+      pthread_mutex_unlock(&game.mutex);
       break;
 
     case '4':
@@ -218,14 +240,12 @@ int main() {
       }
       option_buffer[0] = 'e';
       send(client_socket, &option_buffer, 1, 0);
-      // sleep(1);
       client_socket = -1;
       break;
 
     default:
       printw("Wrong input!\n");
       refresh();
-      sleep(1);
       continue;
       break;
     }
@@ -236,9 +256,9 @@ int main() {
 
       pthread_create(&render_thread, NULL, render_game, &client_socket);
 
-      pthread_mutex_lock(&mutex);
-      paused = false;
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_lock(&game.mutex);
+      game.paused = false;
+      pthread_mutex_unlock(&game.mutex);
 
       pthread_t input_thread;
       pthread_create(&input_thread, NULL, handle_input, &client_socket);
@@ -249,6 +269,8 @@ int main() {
       pthread_join(render_thread, NULL);
     }
   }
+
   endwin();
+  sleep(1);
   return EXIT_SUCCESS;
 }
