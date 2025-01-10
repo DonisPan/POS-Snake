@@ -10,21 +10,21 @@
 
 #define PORT 4606
 
+// map dimensions
 #define MAP_WIDTH 25
 #define MAP_HEIGHT 25
+// maximum snacks that can spawn in game
 #define MAX_SNACKS 250
 #define OBSTACLE_COUNT 20
+// maximum of players that can join server
 #define MAX_PLAYERS 10
 #define SNAKE_MAX_LENGTH 250
+// how often the snake moves
 #define SNAKE_SPEED 500000
+// time limit of timed game
 #define GAME_TIME 10
+// timeout after pausing snake
 #define PAUSE_TIME 5
-
-bool game_end = false;
-bool timed_game = false;
-bool obstacles = false;
-
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
   int x;
@@ -57,13 +57,30 @@ typedef struct {
   Snake *snake;
 } Client_data;
 
-Snack snacks[MAX_SNACKS];
-int current_snack = 0;
-Snake snakes[MAX_PLAYERS];
-char map[MAP_WIDTH * MAP_HEIGHT];
-Obstacle obstacle_map[OBSTACLE_COUNT];
-int client_sockets[MAX_PLAYERS];
-int active_snakes = 0;
+typedef struct {
+  bool game_end;
+  bool timed_game;
+  bool obstacles;
+  bool game_running;
+  char map[MAP_WIDTH * MAP_HEIGHT];
+  Snack snacks[MAX_SNACKS];
+  Snake snakes[MAX_PLAYERS];
+  Obstacle obstacle_map[OBSTACLE_COUNT];
+  int client_sockets[MAX_PLAYERS];
+  int current_snack;
+  int active_snakes;
+  pthread_mutex_t mutex;
+} Game_data;
+
+Game_data game = {
+    .game_end = false,
+    .timed_game = false,
+    .obstacles = false,
+    .game_running = false,
+    .active_snakes = 0,
+    .current_snack = 0,
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+};
 
 void spawn_snake(Snake *snake);
 void spawn_snack();
@@ -88,18 +105,22 @@ void spawn_snack() {
   bool can_spawn = false;
   int x;
   int y;
+
   while (!can_spawn) {
     x = 1 + rand() % (MAP_WIDTH - 2);
     y = 1 + rand() % (MAP_HEIGHT - 2);
 
-    if (map[y * MAP_WIDTH + x] == ' ') {
+    // check if the spot is empty
+    if (game.map[y * MAP_WIDTH + x] == ' ') {
       can_spawn = true;
     }
   }
-  snacks[current_snack].x = x;
-  snacks[current_snack].y = y;
-  snacks[current_snack].chomped = false;
-  ++current_snack;
+
+  // add created snack
+  game.snacks[game.current_snack].x = x;
+  game.snacks[game.current_snack].y = y;
+  game.snacks[game.current_snack].chomped = false;
+  ++game.current_snack;
 }
 
 void generate_obstacles() {
@@ -107,8 +128,8 @@ void generate_obstacles() {
   while (placed < OBSTACLE_COUNT) {
     int x = 1 + rand() % (MAP_WIDTH - 2);
     int y = 1 + rand() % (MAP_HEIGHT - 2);
-    obstacle_map[placed].x = x;
-    obstacle_map[placed].y = y;
+    game.obstacle_map[placed].x = x;
+    game.obstacle_map[placed].y = y;
     ++placed;
   }
 }
@@ -118,33 +139,33 @@ void generate_map() {
   for (int y = 0; y < MAP_HEIGHT; ++y) {
     for (int x = 0; x < MAP_WIDTH; ++x) {
       if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
-        map[y * MAP_WIDTH + x] = '#';
+        game.map[y * MAP_WIDTH + x] = '#';
       } else {
-        map[y * MAP_WIDTH + x] = ' ';
+        game.map[y * MAP_WIDTH + x] = ' ';
       }
     }
   }
 
   // obstacles
   for (int i = 0; i < OBSTACLE_COUNT; ++i) {
-    map[obstacle_map[i].y * MAP_WIDTH + obstacle_map[i].x] = 'X';
+    game.map[game.obstacle_map[i].y * MAP_WIDTH + game.obstacle_map[i].x] = 'X';
   }
 
   // snacks
   for (int i = 0; i < MAX_SNACKS; ++i) {
-    if (!snacks[i].chomped) {
-      map[snacks[i].y * MAP_WIDTH + snacks[i].x] = '*';
+    if (!game.snacks[i].chomped) {
+      game.map[game.snacks[i].y * MAP_WIDTH + game.snacks[i].x] = '*';
     }
   }
 
   // snakes
   for (int s = 0; s < MAX_PLAYERS; ++s) {
-    Snake *snake = &snakes[s];
+    Snake *snake = &game.snakes[s];
     if (!snake->playing || snake->paused) {
       continue;
     }
     for (int i = 0; i < snake->length; ++i) {
-      map[snake->parts[i].y * MAP_WIDTH + snake->parts[i].x] =
+      game.map[snake->parts[i].y * MAP_WIDTH + snake->parts[i].x] =
           (i == 0) ? '0' : 'o';
     }
   }
@@ -153,7 +174,7 @@ void generate_map() {
 void move_snakes() {
   for (int s = 0; s < MAX_PLAYERS; ++s) {
     // move snake
-    Snake *snake = &snakes[s];
+    Snake *snake = &game.snakes[s];
     if (!snake->playing || snake->paused ||
         (snake->dirX == 0 && snake->dirY == 0)) {
       continue;
@@ -169,35 +190,32 @@ void move_snakes() {
     if (snake->parts[0].x <= 0 || snake->parts[0].x >= MAP_WIDTH - 1 ||
         snake->parts[0].y <= 0 || snake->parts[0].y >= MAP_HEIGHT - 1) {
       snake->playing = false;
-      // --active_snakes;
     }
 
     // obstacle collision
     for (int i = 0; i < OBSTACLE_COUNT; ++i) {
-      if (obstacle_map[i].x == snake->parts[0].x &&
-          obstacle_map[i].y == snake->parts[0].y) {
+      if (game.obstacle_map[i].x == snake->parts[0].x &&
+          game.obstacle_map[i].y == snake->parts[0].y) {
         snake->playing = false;
-        // --active_snakes;
       }
     }
 
     // snake collisions
     for (int j = 0; j < MAX_PLAYERS; ++j) {
-      Snake *tmp_snake = &snakes[j];
+      Snake *tmp_snake = &game.snakes[j];
       for (int i = 1; i < tmp_snake->length; ++i) {
         if (snake->parts[0].x == tmp_snake->parts[i].x &&
             snake->parts[0].y == tmp_snake->parts[i].y) {
           snake->playing = false;
-          // --active_snakes;
         }
       }
     }
 
     // snack collisions
     for (int i = 0; i < MAX_SNACKS; ++i) {
-      if (!snacks[i].chomped && snacks[i].x == snake->parts[0].x &&
-          snacks[i].y == snake->parts[0].y) {
-        snacks[i].chomped = true;
+      if (!game.snacks[i].chomped && game.snacks[i].x == snake->parts[0].x &&
+          game.snacks[i].y == snake->parts[0].y) {
+        game.snacks[i].chomped = true;
         snake->length++;
         spawn_snack();
       }
@@ -207,36 +225,75 @@ void move_snakes() {
 
 void *game_loop(void *args) {
   int timer = 0;
-  while (!game_end) {
-    pthread_mutex_lock(&mutex);
+  while (!game.game_end) {
+    pthread_mutex_lock(&game.mutex);
     move_snakes();
     generate_map();
 
     for (int i = 0; i < MAX_PLAYERS; ++i) {
-      if (client_sockets[i] != -1 && snakes[i].playing) {
+      if (game.client_sockets[i] != -1 && game.snakes[i].playing) {
         int id = i;
-        send(client_sockets[i], &id, sizeof(int), 0);
+        send(game.client_sockets[i], &id, sizeof(int), 0);
 
-        int length = snakes[i].length;
-        send(client_sockets[i], &length, sizeof(int), 0);
+        int length = game.snakes[i].length;
+        send(game.client_sockets[i], &length, sizeof(int), 0);
 
-        send(client_sockets[i], map, sizeof(map), 0);
+        send(game.client_sockets[i], game.map, sizeof(game.map), 0);
       }
     }
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_unlock(&game.mutex);
 
     // timed game logic
-    if (timed_game) {
+    if (game.timed_game) {
       ++timer;
       if (timer >= (GAME_TIME * 1000000 / SNAKE_SPEED)) {
-        pthread_mutex_lock(&mutex);
-        game_end = true;
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_lock(&game.mutex);
+        game.game_end = true;
+        pthread_mutex_unlock(&game.mutex);
       }
+    }
+
+    if (game.game_running && game.active_snakes == 0) {
+      game.game_end = true;
+      break;
     }
 
     usleep(SNAKE_SPEED);
   }
+  printf("Game ended!\n");
+  return NULL;
+}
+
+void *accept_clients(void *args) {
+  int *server_socket = (int *)args;
+
+  int client_id = 0;
+  while (1) {
+    struct sockaddr_in client_address;
+    socklen_t client_length = sizeof(client_address);
+
+    int client_socket = accept(
+        *server_socket, (struct sockaddr *)&client_address, &client_length);
+    if (client_socket == -1) {
+      perror("Accept failure!\n");
+      continue;
+    }
+
+    printf("Client %d connected.\n", client_id);
+
+    // give client its data
+    Client_data *client_data = malloc(sizeof(Client_data));
+    client_data->id = client_id;
+    ++client_id;
+    client_data->client_socket = client_socket;
+    client_data->snake = &game.snakes[client_data->id];
+    spawn_snake(client_data->snake);
+
+    pthread_t client_thread;
+    pthread_create(&client_thread, NULL, handle_client, client_data);
+    pthread_detach(client_thread);
+  }
+
   return NULL;
 }
 
@@ -244,43 +301,49 @@ void *handle_client(void *args) {
   Client_data *client_data = (Client_data *)args;
   Snake *snake = client_data->snake;
 
-  client_sockets[client_data->id] = client_data->client_socket;
+  game.client_sockets[client_data->id] = client_data->client_socket;
 
-  pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&game.mutex);
   spawn_snack();
-  ++active_snakes;
-  pthread_mutex_unlock(&mutex);
+  ++game.active_snakes;
+  game.game_running = true;
+  pthread_mutex_unlock(&game.mutex);
 
   // first player game mode set
   if (client_data->id == 0) {
     char mode[1];
     recv(client_data->client_socket, mode, 1, 0);
     if (mode[0] == '1') {
-      timed_game = true;
+      game.timed_game = true;
+    }
+    recv(client_data->client_socket, mode, 1, 0);
+    if (mode[0] == '1') {
+      game.timed_game = true;
     }
   }
 
   // user is playing
   char buffer[1];
   int pause_timer = 0;
-  bool playing = true;
-  while (playing) {
+  // bool playing = true;
+  while (snake->playing) {
     recv(client_data->client_socket, buffer, 1, 0);
 
     if (buffer[0] == 'r') {
-      pthread_mutex_lock(&mutex);
+      pthread_mutex_lock(&game.mutex);
       snake->paused = false;
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_unlock(&game.mutex);
     }
 
     if (buffer[0] == 'e') {
-      playing = false;
-      continue;
+      printf("Recieved 'e'.\n");
+      snake->playing = false;
+      break;
     }
 
     if (!snake->paused) {
       pause_timer = 0;
-      pthread_mutex_lock(&mutex);
+      pthread_mutex_lock(&game.mutex);
       switch (buffer[0]) {
       case 'w':
         snake->dirX = 0;
@@ -311,22 +374,23 @@ void *handle_client(void *args) {
       default:
         break;
       }
-      pthread_mutex_unlock(&mutex);
+      pthread_mutex_unlock(&game.mutex);
     }
 
     // pause timeout
     if (snake->paused) {
       ++pause_timer;
       if (pause_timer >= (PAUSE_TIME * 1000000)) {
-        printw("Client %d disconnected.\n", client_data->id);
         sleep(2);
-        playing = false;
+        snake->playing = false;
       }
       sleep(1);
     }
   }
 
-  --active_snakes;
+  --game.active_snakes;
+  printf("Client %d disconnected. Current active players: %d.\n",
+         client_data->id, game.active_snakes);
   close(client_data->client_socket);
   free(client_data);
 
@@ -370,39 +434,20 @@ int main() {
   pthread_t game_thread;
   pthread_create(&game_thread, NULL, game_loop, NULL);
 
-  int client_id = 0;
-  while (!game_end) {
-    struct sockaddr_in client_address;
-    socklen_t client_length = sizeof(client_address);
+  // start listening for clients
+  pthread_t handle_clients_thread;
+  pthread_create(&handle_clients_thread, NULL, accept_clients, &server_socket);
 
-    int client_socket = accept(
-        server_socket, (struct sockaddr *)&client_address, &client_length);
-    if (client_socket == -1) {
-      perror("Accept failure!\n");
-      continue;
-    }
-
-    Client_data *client_data = malloc(sizeof(Client_data));
-    client_data->id = client_id;
-    ++client_id;
-    client_data->client_socket = client_socket;
-    client_data->snake = &snakes[client_data->id];
-    spawn_snake(client_data->snake);
-
-    pthread_t client_thread;
-    pthread_create(&client_thread, NULL, handle_client, client_data);
-    pthread_detach(client_thread);
-
-    sleep(1);
-    if (active_snakes == 0) {
-      game_end = true;
-      pthread_join(game_thread, NULL);
+  while (1) {
+    if (game.game_end) {
+      pthread_cancel(handle_clients_thread);
+      break;
     }
   }
 
   printf("Server closed!\n");
   close(server_socket);
-  pthread_mutex_destroy(&mutex);
+  pthread_mutex_destroy(&game.mutex);
 
   return EXIT_SUCCESS;
 }

@@ -159,10 +159,6 @@ int main() {
     render_menu();
     option = getch();
 
-    if (client_socket != -1) {
-      // recv();
-    }
-
     switch (option) {
       char option_buffer[1];
 
@@ -222,7 +218,7 @@ int main() {
       }
       option_buffer[0] = 'e';
       send(client_socket, &option_buffer, 1, 0);
-      sleep(1);
+      // sleep(1);
       client_socket = -1;
       break;
 
