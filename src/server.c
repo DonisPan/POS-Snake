@@ -88,6 +88,7 @@ void generate_map() {
           (i == 0) ? '0' : 'o';
     }
   }
+  game.map[0] = '#';
 }
 
 void move_snakes() {
@@ -135,6 +136,8 @@ void move_snakes() {
       if (!game.snacks[i].chomped && game.snacks[i].x == snake->parts[0].x &&
           game.snacks[i].y == snake->parts[0].y) {
         game.snacks[i].chomped = true;
+        snake->parts[snake->length].x = snake->parts[snake->length-1].x;
+        snake->parts[snake->length].y = snake->parts[snake->length-1].y;
         snake->length++;
         spawn_snack();
       }
@@ -257,7 +260,6 @@ void *handle_client(void *args) {
     }
 
     if (buffer[0] == 'e') {
-      printf("Recieved 'e'.\n");
       snake->playing = false;
       break;
     }

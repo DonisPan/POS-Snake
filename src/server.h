@@ -1,5 +1,9 @@
 #pragma once
 
+#include "obstacle.h"
+#include "snack.h"
+#include "snake.h"
+
 #include <arpa/inet.h>
 #include <ncurses.h>
 #include <pthread.h>
@@ -27,31 +31,6 @@
 #define GAME_TIME 10
 // timeout after pausing snake
 #define PAUSE_TIME 5
-
-typedef struct {
-  int x;
-  int y;
-} Snake_bit;
-
-typedef struct {
-  Snake_bit parts[SNAKE_MAX_LENGTH];
-  int length;
-  int dirX;
-  int dirY;
-  bool paused;
-  bool playing;
-} Snake;
-
-typedef struct {
-  int x;
-  int y;
-  bool chomped;
-} Snack;
-
-typedef struct {
-  int x;
-  int y;
-} Obstacle;
 
 typedef struct {
   int id;
