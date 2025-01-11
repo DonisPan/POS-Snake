@@ -1,28 +1,32 @@
-# Compiler
+# compiler
 CC = gcc
 
-# Compiler flags
 CFLAGS = -Wall -Wextra -pthread -lncurses
+LFLAGS = -lncurses
 
-# Directories
 SRC_DIR = ../src
 BLD_DIR = .
 
-# Targets
+# targets
 TARGETS = server client
 
-DEPENDS = map.c snake.c
+# files
+SERVER_SRCS = $(SRC_DIR)/server.c $(SRC_DIR)/map.c $(SRC_DIR)/snake.c
+CLIENT_SRCS = $(SRC_DIR)/client.c
 
-# Default target
+
 all: $(TARGETS)
 
-# Server target
-server:	$(SRC_DIR)/server.c
-	$(CC) -o $(BLD_DIR)/server $(SRC_DIR)/server.c $(SRC_DIR)/$(DEPENDS) $(CFLAGS)
+# server
+server:	$(SERVER_SRCS)
+	$(CC) $(CFLAGS) -o $(BLD_DIR)/server $(SERVER_SRCS) $(LFLAGS)
 
-# Client target
-client: $(SRC_DIR)/client.c
-	$(CC) -o $(BLD_DIR)/client $(SRC_DIR)/client.c $(CFLAGS)
+# client
+client: $(CLIENT_SRCS)
+	$(CC) $(CFLAGS) -o $(BLD_DIR)/client $(CLIENT_SRCS) $(LFLAGS)
 
 run-client: client
 	$(BLD_DIR)/client
+
+clean:
+	rm -f $(BLD_DIR)/server $(BLD_DIR)/client
