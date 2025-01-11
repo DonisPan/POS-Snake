@@ -1,5 +1,7 @@
 #pragma once
 
+#include "map.h"
+
 #include <arpa/inet.h>
 #include <ncurses.h>
 #include <netinet/in.h>
@@ -17,7 +19,7 @@
 #define SNAKE_SPEED 500000
 
 typedef struct {
-  char map[MAP_WIDTH * MAP_HEIGHT];
+  Map map;
   pthread_mutex_t mutex;
   bool paused;
 } Client_data;

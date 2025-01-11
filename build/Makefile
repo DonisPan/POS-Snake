@@ -11,12 +11,14 @@ BLD_DIR = .
 # Targets
 TARGETS = server client
 
+DEPENDS = map.c snake.c
+
 # Default target
 all: $(TARGETS)
 
 # Server target
 server:	$(SRC_DIR)/server.c
-	$(CC) -o $(BLD_DIR)/server $(SRC_DIR)/server.c $(CFLAGS)
+	$(CC) -o $(BLD_DIR)/server $(SRC_DIR)/server.c $(SRC_DIR)/$(DEPENDS) $(CFLAGS)
 
 # Client target
 client: $(SRC_DIR)/client.c

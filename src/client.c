@@ -8,6 +8,9 @@ Client_data game = {
 void *render_game(void *args) {
   int client_socket = *(int *)args;
 
+  // game.map.map =
+  //     malloc(game.map.map_width * game.map.map_height * sizeof(char));
+
   while (1) {
     if (!game.paused) {
       int id;
@@ -16,13 +19,16 @@ void *render_game(void *args) {
       int length;
       recv(client_socket, &length, sizeof(int), 0);
 
-      recv(client_socket, game.map, sizeof(game.map), 0);
+      recv(client_socket, game.map.map,
+           game.map.map_width * game.map.map_height, 0);
+
+      pthread_mutex_lock(&game.mutex);
 
       clear();
       printw("Player %d score: %d", id + 1, length - 1);
-      for (int y = 0; y < MAP_HEIGHT; ++y) {
-        for (int x = 0; x < MAP_WIDTH; ++x) {
-          switch (game.map[y * MAP_WIDTH + x]) {
+      for (int y = 0; y < game.map.map_height; ++y) {
+        for (int x = 0; x < game.map.map_width; ++x) {
+          switch (game.map.map[y * game.map.map_width + x]) {
           case 'X':
             attron(COLOR_PAIR(1));
             break;
@@ -34,10 +40,11 @@ void *render_game(void *args) {
             break;
           }
 
-          mvaddch(y + 1, x * 2 + 1, game.map[y * MAP_WIDTH + x]);
+          mvaddch(y + 1, x * 2 + 1, game.map.map[y * game.map.map_width + x]);
           mvaddch(y + 1, x * 2 + 2, ' ');
         }
       }
+      pthread_mutex_unlock(&game.mutex);
       printw("\n");
       refresh();
     }
@@ -96,6 +103,12 @@ int connect_to_server(int client_sock) {
       return -1;
     }
   }
+
+  recv(client_socket, &game.map.map_width, sizeof(int), 0);
+  recv(client_socket, &game.map.map_height, sizeof(int), 0);
+  game.map.map =
+      malloc(game.map.map_width * game.map.map_height * sizeof(char));
+
   return client_socket;
 }
 
@@ -239,6 +252,10 @@ int main() {
 
       pthread_cancel(render_thread);
       pthread_join(render_thread, NULL);
+
+      if (game.map.map != NULL) {
+        free(game.map.map);
+      }
     }
   }
 

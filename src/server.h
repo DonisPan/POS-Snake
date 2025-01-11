@@ -1,8 +1,9 @@
 #pragma once
 
-#include "obstacle.h"
-#include "snack.h"
-#include "snake.h"
+// #include "obstacle.h"
+// #include "snack.h"
+// #include "snake.h"
+#include "map.h"
 
 #include <arpa/inet.h>
 #include <ncurses.h>
@@ -43,21 +44,20 @@ typedef struct {
   bool timed_game;
   bool obstacles;
   bool game_running;
-  char map[MAP_WIDTH * MAP_HEIGHT];
-  Snack snacks[MAX_SNACKS];
-  Snake snakes[MAX_PLAYERS];
-  Obstacle obstacle_map[OBSTACLE_COUNT];
+  // char map[MAP_WIDTH * MAP_HEIGHT];
+  // Snack snacks[MAX_SNACKS];
+  // Snake snakes[MAX_PLAYERS];
+  // Obstacle obstacle_map[OBSTACLE_COUNT];
   int client_sockets[MAX_PLAYERS];
-  int current_snack;
+  // int current_snack;
   int active_snakes;
   pthread_mutex_t mutex;
+  Map map;
 } Game_data;
 
-void spawn_snake(Snake *snake);
-void spawn_snack();
-void generate_map();
-void generate_obstacles();
+// void spawn_snack();
+// void generate_map();
+// void generate_obstacles();
 void move_snakes();
-void broadcast_map();
 void *handle_client(void *args);
 void *game_loop(void *args);

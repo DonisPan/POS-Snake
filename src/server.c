@@ -6,95 +6,13 @@ Game_data game = {
     .obstacles = false,
     .game_running = false,
     .active_snakes = 0,
-    .current_snack = 0,
     .mutex = PTHREAD_MUTEX_INITIALIZER,
 };
 
-void spawn_snake(Snake *snake) {
-  snake->length = 1;
-  snake->parts[0].x = 1 + rand() % (MAP_WIDTH - 2);
-  snake->parts[0].y = 1 + rand() % (MAP_HEIGHT - 2);
-  snake->dirX = 0;
-  snake->dirY = 0;
-  snake->paused = false;
-  snake->playing = true;
-}
-
-void spawn_snack() {
-  bool can_spawn = false;
-  int x;
-  int y;
-
-  while (!can_spawn) {
-    x = 1 + rand() % (MAP_WIDTH - 2);
-    y = 1 + rand() % (MAP_HEIGHT - 2);
-
-    // check if the spot is empty
-    if (game.map[y * MAP_WIDTH + x] == ' ') {
-      can_spawn = true;
-    }
-  }
-
-  // add created snack
-  game.snacks[game.current_snack].x = x;
-  game.snacks[game.current_snack].y = y;
-  game.snacks[game.current_snack].chomped = false;
-  ++game.current_snack;
-}
-
-void generate_obstacles() {
-  int placed = 0;
-  while (placed < OBSTACLE_COUNT) {
-    int x = 1 + rand() % (MAP_WIDTH - 2);
-    int y = 1 + rand() % (MAP_HEIGHT - 2);
-    game.obstacle_map[placed].x = x;
-    game.obstacle_map[placed].y = y;
-    ++placed;
-  }
-}
-
-void generate_map() {
-  // map border
-  for (int y = 0; y < MAP_HEIGHT; ++y) {
-    for (int x = 0; x < MAP_WIDTH; ++x) {
-      if (x == 0 || y == 0 || x == MAP_WIDTH - 1 || y == MAP_HEIGHT - 1) {
-        game.map[y * MAP_WIDTH + x] = '#';
-      } else {
-        game.map[y * MAP_WIDTH + x] = ' ';
-      }
-    }
-  }
-
-  // obstacles
-  for (int i = 0; i < OBSTACLE_COUNT; ++i) {
-    game.map[game.obstacle_map[i].y * MAP_WIDTH + game.obstacle_map[i].x] = 'X';
-  }
-
-  // snacks
-  for (int i = 0; i < MAX_SNACKS; ++i) {
-    if (!game.snacks[i].chomped) {
-      game.map[game.snacks[i].y * MAP_WIDTH + game.snacks[i].x] = '*';
-    }
-  }
-
-  // snakes
-  for (int s = 0; s < MAX_PLAYERS; ++s) {
-    Snake *snake = &game.snakes[s];
-    if (!snake->playing || snake->paused) {
-      continue;
-    }
-    for (int i = 0; i < snake->length; ++i) {
-      game.map[snake->parts[i].y * MAP_WIDTH + snake->parts[i].x] =
-          (i == 0) ? '0' : 'o';
-    }
-  }
-  game.map[0] = '#';
-}
-
 void move_snakes() {
-  for (int s = 0; s < MAX_PLAYERS; ++s) {
+  for (int s = 0; s < game.map.data.max_snakes; ++s) {
     // move snake
-    Snake *snake = &game.snakes[s];
+    Snake *snake = &game.map.data.snakes[s];
     if (!snake->playing || snake->paused ||
         (snake->dirX == 0 && snake->dirY == 0)) {
       continue;
@@ -107,22 +25,23 @@ void move_snakes() {
     snake->parts[0].y += snake->dirY;
 
     // wall collisions
-    if (snake->parts[0].x <= 0 || snake->parts[0].x >= MAP_WIDTH - 1 ||
-        snake->parts[0].y <= 0 || snake->parts[0].y >= MAP_HEIGHT - 1) {
+    if (snake->parts[0].x <= 0 || snake->parts[0].x >= game.map.map_width - 1 ||
+        snake->parts[0].y <= 0 ||
+        snake->parts[0].y >= game.map.map_height - 1) {
       snake->playing = false;
     }
 
     // obstacle collision
-    for (int i = 0; i < OBSTACLE_COUNT; ++i) {
-      if (game.obstacle_map[i].x == snake->parts[0].x &&
-          game.obstacle_map[i].y == snake->parts[0].y) {
+    for (int i = 0; i < game.map.data.obstacle_count; ++i) {
+      if (game.map.data.obstacles[i].x == snake->parts[0].x &&
+          game.map.data.obstacles[i].y == snake->parts[0].y) {
         snake->playing = false;
       }
     }
 
     // snake collisions
     for (int j = 0; j < MAX_PLAYERS; ++j) {
-      Snake *tmp_snake = &game.snakes[j];
+      Snake *tmp_snake = &game.map.data.snakes[j];
       for (int i = 1; i < tmp_snake->length; ++i) {
         if (snake->parts[0].x == tmp_snake->parts[i].x &&
             snake->parts[0].y == tmp_snake->parts[i].y) {
@@ -133,16 +52,18 @@ void move_snakes() {
 
     // snack collisions
     for (int i = 0; i < MAX_SNACKS; ++i) {
-      if (!game.snacks[i].chomped && game.snacks[i].x == snake->parts[0].x &&
-          game.snacks[i].y == snake->parts[0].y) {
-        game.snacks[i].chomped = true;
-        snake->parts[snake->length].x = snake->parts[snake->length-1].x;
-        snake->parts[snake->length].y = snake->parts[snake->length-1].y;
+      if (!game.map.data.snacks[i].chomped &&
+          game.map.data.snacks[i].x == snake->parts[0].x &&
+          game.map.data.snacks[i].y == snake->parts[0].y) {
+        game.map.data.snacks[i].chomped = true;
+        // snake->parts[snake->length].x = snake->parts[snake->length - 1].x;
+        // snake->parts[snake->length].y = snake->parts[snake->length - 1].y;
         snake->length++;
-        spawn_snack();
+        spawn_snack(&game.map);
       }
     }
   }
+  // printf("Moved snakes.\n");
 }
 
 void *game_loop(void *args) {
@@ -151,17 +72,18 @@ void *game_loop(void *args) {
   while (!game.game_end) {
     pthread_mutex_lock(&game.mutex);
     move_snakes();
-    generate_map();
+    generate_map(&game.map);
 
-    for (int i = 0; i < MAX_PLAYERS; ++i) {
-      if (game.client_sockets[i] != -1 && game.snakes[i].playing) {
+    for (int i = 0; i < game.map.data.max_snakes; ++i) {
+      if (game.client_sockets[i] != -1 && game.map.data.snakes[i].playing) {
         int id = i;
         send(game.client_sockets[i], &id, sizeof(int), 0);
 
-        int length = game.snakes[i].length;
+        int length = game.map.data.snakes[i].length;
         send(game.client_sockets[i], &length, sizeof(int), 0);
 
-        send(game.client_sockets[i], game.map, sizeof(game.map), 0);
+        send(game.client_sockets[i], game.map.map,
+             game.map.map_width * game.map.map_height, 0);
       }
     }
     pthread_mutex_unlock(&game.mutex);
@@ -209,8 +131,8 @@ void *accept_clients(void *args) {
     client_data->id = client_id;
     ++client_id;
     client_data->client_socket = client_socket;
-    client_data->snake = &game.snakes[client_data->id];
-    spawn_snake(client_data->snake);
+    client_data->snake = &game.map.data.snakes[client_data->id];
+    spawn_snake(client_data->snake, MAP_WIDTH, MAP_HEIGHT);
 
     pthread_t client_thread;
     pthread_create(&client_thread, NULL, handle_client, client_data);
@@ -227,10 +149,15 @@ void *handle_client(void *args) {
   game.client_sockets[client_data->id] = client_data->client_socket;
 
   pthread_mutex_lock(&game.mutex);
-  spawn_snack();
+  spawn_snack(&game.map);
   ++game.active_snakes;
   game.game_running = true;
   pthread_mutex_unlock(&game.mutex);
+
+  printf("Sending width: %d\n", game.map.map_width);
+  send(client_data->client_socket, &game.map.map_width, sizeof(int), 0);
+  printf("Sending height: %d\n", game.map.map_height);
+  send(client_data->client_socket, &game.map.map_height, sizeof(int), 0);
 
   // first player game mode set
   if (client_data->id == 0) {
@@ -242,7 +169,7 @@ void *handle_client(void *args) {
     recv(client_data->client_socket, mode, 1, 0);
     if (mode[0] == '1') {
       game.obstacles = true;
-      generate_obstacles();
+      generate_obstacles(&game.map);
     }
   }
 
@@ -351,6 +278,23 @@ int main() {
 
   printf("Server is listening on port: %d\n", PORT);
 
+  game.map.map_width = MAP_WIDTH;
+  game.map.map_height = MAP_HEIGHT;
+  game.map.map =
+      malloc((game.map.map_width * game.map.map_height) * sizeof(char));
+
+  Map_data data = {
+      .max_snacks = 200,
+      .max_snakes = 10,
+      .obstacle_count = 20,
+      .current_snack = 0,
+  };
+  data.snacks = malloc(data.max_snacks * sizeof(Snack));
+  data.snakes = malloc(data.max_snakes * sizeof(Snake));
+  data.obstacles = malloc(data.obstacle_count * sizeof(Obstacle));
+
+  game.map.data = data;
+
   // start game
   pthread_t game_thread;
   pthread_create(&game_thread, NULL, game_loop, NULL);
@@ -369,6 +313,11 @@ int main() {
   printf("Server closed!\n");
   close(server_socket);
   pthread_mutex_destroy(&game.mutex);
+
+  free(game.map.map);
+  free(game.map.data.snacks);
+  free(game.map.data.snakes);
+  free(game.map.data.obstacles);
 
   return EXIT_SUCCESS;
 }

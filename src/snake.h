@@ -14,3 +14,5 @@ typedef struct {
   bool paused;
   bool playing;
 } Snake;
+
+void spawn_snake(Snake *snake, int max_width, int max_height);
