@@ -8,9 +8,6 @@ Client_data game = {
 void *render_game(void *args) {
   int client_socket = *(int *)args;
 
-  // game.map.map =
-  //     malloc(game.map.map_width * game.map.map_height * sizeof(char));
-
   while (1) {
     if (!game.paused) {
       int id;
@@ -22,10 +19,9 @@ void *render_game(void *args) {
       recv(client_socket, game.map.map,
            game.map.map_width * game.map.map_height, 0);
 
-      pthread_mutex_lock(&game.mutex);
-
       clear();
       printw("Player %d score: %d", id + 1, length - 1);
+      pthread_mutex_lock(&game.mutex);      
       for (int y = 0; y < game.map.map_height; ++y) {
         for (int x = 0; x < game.map.map_width; ++x) {
           switch (game.map.map[y * game.map.map_width + x]) {
@@ -48,6 +44,7 @@ void *render_game(void *args) {
       printw("\n");
       refresh();
     }
+    usleep(33333);
   }
   return NULL;
 }
@@ -100,7 +97,7 @@ int connect_to_server(int client_sock) {
                 sizeof(server_address)) == -1) {
       close(client_socket);
       perror("Connection failed!\n");
-      return -1;
+      return EXIT_FAILURE;
     }
   }
 
@@ -257,6 +254,7 @@ int main() {
         free(game.map.map);
       }
     }
+    sleep(1);
   }
 
   endwin();
