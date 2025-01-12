@@ -14,22 +14,6 @@
 
 #define PORT 4606
 
-// map dimensions
-// #define MAP_WIDTH 25
-// #define MAP_HEIGHT 25
-// maximum snacks that can spawn in game
-// #define MAX_SNACKS 250
-// #define OBSTACLE_COUNT 20
-// maximum of players that can join server
- #define MAX_PLAYERS 10
-// #define SNAKE_MAX_LENGTH 250
-// how often the snake moves
-// #define SNAKE_SPEED 500000
-// time limit of timed game
-// #define GAME_TIME 10
-// timeout after pausing snake
-// #define PAUSE_TIME 5
-
 typedef struct {
   int id;
   int client_socket;
@@ -41,7 +25,7 @@ typedef struct {
   bool timed_game;
   bool obstacles;
   bool game_running;
-  int client_sockets[MAX_PLAYERS];
+  int *client_sockets;
   int active_snakes;
   int snake_speed;
   int max_snake_length;

@@ -1,8 +1,8 @@
 # compiler
 CC = gcc
 
-CFLAGS = -Wall -Wextra -pthread -lncurses
-LFLAGS = -lncurses
+CFLAGS = -Wall -Wextra
+LFLAGS = -lncurses -pthread
 
 SRC_DIR = ../src
 BLD_DIR = .

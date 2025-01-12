@@ -1,5 +1,6 @@
 #include "server.h"
 
+// game settings
 Game_data game = {
     .game_end = false,
     .timed_game = false,
@@ -7,10 +8,9 @@ Game_data game = {
     .game_running = false,
     .active_snakes = 0,
     .mutex = PTHREAD_MUTEX_INITIALIZER,
-  .snake_speed = 500000,
-  .game_delay = 10,
-  .pause_delay = 5,
-
+    .snake_speed = 500000,
+    .game_delay = 10,
+    .pause_delay = 5,
 };
 
 void move_snakes() {
@@ -60,8 +60,6 @@ void move_snakes() {
           game.map.data.snacks[i].x == snake->parts[0].x &&
           game.map.data.snacks[i].y == snake->parts[0].y) {
         game.map.data.snacks[i].chomped = true;
-        // snake->parts[snake->length].x = snake->parts[snake->length - 1].x;
-        // snake->parts[snake->length].y = snake->parts[snake->length - 1].y;
         snake->length++;
         spawn_snack(&game.map);
       }
@@ -73,12 +71,16 @@ void *game_loop(void *args) {
   int timer = 0;
 
   while (!game.game_end) {
+
+    // move snakes and generate current map
     pthread_mutex_lock(&game.mutex);
     move_snakes();
     generate_map(&game.map);
 
+    // send current map to active clients
     for (int i = 0; i < game.map.data.max_snakes; ++i) {
-      if (game.client_sockets[i] != -1 && game.map.data.snakes[i].playing) {
+      if (game.client_sockets[i] != -1 && game.map.data.snakes[i].playing &&
+          !game.map.data.snakes[i].paused) {
         int id = i;
         send(game.client_sockets[i], &id, sizeof(int), 0);
 
@@ -101,6 +103,7 @@ void *game_loop(void *args) {
       }
     }
 
+    // check if there are no active players
     if (game.game_running && game.active_snakes == 0) {
       game.game_end = true;
       break;
@@ -157,6 +160,7 @@ void *handle_client(void *args) {
   game.game_running = true;
   pthread_mutex_unlock(&game.mutex);
 
+  // send map dimensions to client
   send(client_data->client_socket, &game.map.map_width, sizeof(int), 0);
   send(client_data->client_socket, &game.map.map_height, sizeof(int), 0);
 
@@ -180,12 +184,14 @@ void *handle_client(void *args) {
   while (snake->playing) {
     recv(client_data->client_socket, buffer, 1, 0);
 
+    // pause
     if (buffer[0] == 'r') {
       pthread_mutex_lock(&game.mutex);
       snake->paused = false;
       pthread_mutex_unlock(&game.mutex);
     }
 
+    // disable player
     if (buffer[0] == 'e') {
       snake->playing = false;
       break;
@@ -258,6 +264,7 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  // when server closes release port
   int opt = 1;
   setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(int));
 
@@ -266,13 +273,15 @@ int main() {
   server_address.sin_addr.s_addr = INADDR_ANY;
   server_address.sin_port = htons(PORT);
 
+  // bind server socket
   if (bind(server_socket, (struct sockaddr *)&server_address,
            sizeof(server_address)) == -1) {
     perror("Bind failed!\n");
     return EXIT_FAILURE;
   }
 
-  if (listen(server_socket, MAX_PLAYERS) == -1) {
+  // listen for clients
+  if (listen(server_socket, game.map.data.max_snakes) == -1) {
     perror("Listen failed!\n");
     return EXIT_FAILURE;
   }
@@ -285,7 +294,9 @@ int main() {
 
   game.map.map =
       malloc((game.map.map_width * game.map.map_height) * sizeof(char));
+  game.client_sockets = malloc(game.map.data.max_snakes * sizeof(int));
 
+  // additional game settings
   Map_data data = {
       .max_snacks = 200,
       .max_snakes = 10,
@@ -309,6 +320,7 @@ int main() {
   while (1) {
     if (game.game_end) {
       pthread_cancel(handle_clients_thread);
+      pthread_join(handle_clients_thread, NULL);
       break;
     }
   }
@@ -317,6 +329,16 @@ int main() {
   close(server_socket);
   pthread_mutex_destroy(&game.mutex);
 
+  printf("Scores for this game were: \n");
+  for (int i = 0; i < game.map.data.max_snakes; ++i) {
+    if (!game.map.data.snakes[i].length) {
+      continue;
+    }
+    printf("Player %d:  %d points.\n", i + 1,
+           game.map.data.snakes[i].length - 1);
+  }
+
+  free(game.client_sockets);
   free(game.map.map);
   free(game.map.data.snacks);
   free(game.map.data.snakes);

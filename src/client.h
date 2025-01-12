@@ -13,10 +13,10 @@
 
 #define PORT 4606
 
-#define BUFFER_SIZE 200;
-#define MAP_WIDTH 25
-#define MAP_HEIGHT 25
-#define SNAKE_SPEED 500000
+// #define BUFFER_SIZE 200;
+// #define MAP_WIDTH 25
+// #define MAP_HEIGHT 25
+// #define SNAKE_SPEED 500000
 
 typedef struct {
   Map map;
