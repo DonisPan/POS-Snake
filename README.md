@@ -1,3 +1,3 @@
 # POS-Snake
-    Snake in C
+    Multiplayer snake in C with threads
 # POS-Snake
