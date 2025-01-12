@@ -14,6 +14,16 @@
 
 #define PORT 4606
 
+// setings
+#define MAP_HEIGHT 40
+#define MAP_WIDTH 30
+#define MAX_SNACKS 200
+#define MAX_PLAYERS 10
+#define OBSTACLE_COUNT 16
+#define TIMED_GAME_DELAY 10
+#define PAUSE_DELAY 5
+#define SNAKE_SPEED 400000
+
 typedef struct {
   int id;
   int client_socket;

@@ -8,9 +8,9 @@ Game_data game = {
     .game_running = false,
     .active_snakes = 0,
     .mutex = PTHREAD_MUTEX_INITIALIZER,
-    .snake_speed = 500000,
-    .game_delay = 10,
-    .pause_delay = 5,
+    .snake_speed = SNAKE_SPEED,
+    .game_delay = TIMED_GAME_DELAY,
+    .pause_delay = PAUSE_DELAY,
 };
 
 void move_snakes() {
@@ -289,8 +289,8 @@ int main() {
   printf("Server is listening on port: %d\n", PORT);
 
   // map size
-  game.map.map_width = 30;
-  game.map.map_height = 50;
+  game.map.map_width = MAP_WIDTH;
+  game.map.map_height = MAP_HEIGHT;
 
   game.map.map =
       malloc((game.map.map_width * game.map.map_height) * sizeof(char));
@@ -298,9 +298,9 @@ int main() {
 
   // additional game settings
   Map_data data = {
-      .max_snacks = 200,
-      .max_snakes = 10,
-      .obstacle_count = 20,
+      .max_snacks = MAX_SNACKS,
+      .max_snakes = MAX_PLAYERS,
+      .obstacle_count = OBSTACLE_COUNT,
       .current_snack = 0,
   };
   data.snacks = malloc(data.max_snacks * sizeof(Snack));
